@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+
+from typing import Optional, List
+from enum import Enum
+from OpenSSL import crypto, SSL
+from pathlib import Path
+import os
+from configparser import ConfigParser
+import typer
+
+app = typer.Typer()
+
+class MessageDigest(str, Enum):
+    sha256 = "sha256"
+    sha512 = "sha512"
+
+
+@app.callback()
+def callback(ctx: typer.Context,
+             config: Optional[Path] = typer.Option(None, envvar='CONFIG', help="Ini format config file"),
+             ):
+    '''Callback Docstring'''
+    if config and config.exists():
+        ini = ConfigParser()
+        ini.read_string(config.read_text())
+        for k,v in ini['default'].items():
+            envname = k.upper()
+            if not envname in os.environ:
+                os.environ[envname] = v
+
+@app.command()
+def cert(
+    common_name: str = typer.Argument(
+        ..., envvar="SUBJECT_CN", help="Main name on certificate"
+    ),
+    cert_file: str = typer.Argument(
+        ..., envvar="CERT_FILE", help="File name to write certificate to."
+    ),
+    key_file: str = typer.Argument(
+        ..., envvar="KEY_FILE", help="File name to write private key to."
+    ),
+    valid_days: Optional[int] = typer.Option(
+        ...,
+        "--valid-days",
+        "-d",
+        envvar="VALID_DAYS",
+        help="Number of days the certificate is valid for",
+    ),
+    subject_alternative_names: Optional[List[str]] = typer.Option(
+        None,
+        "--san",
+        "-s",
+        help="Subject alternative names for certificate, the Common Name is added to this list.",
+    ),
+    bits: Optional[int] = typer.Option(
+        ...,
+        "--bits",
+        "-b",
+        envvar="BITS",
+        help="Size of generated key, in bits.",
+    ),
+    digest: Optional[MessageDigest] = typer.Option(
+        ...,
+        "--digest",
+        "-D",
+        envvar="DIGEST",
+        help="Message digest to use.",
+    ),
+    append_domain: Optional[str] = typer.Option(
+        None,
+        "--append-domain",
+        "-a",
+        envvar="APPEND_DOMAIN",
+        help="If provided, this value is appended to all domain names (CN, SAN) so short names can be used.",
+    ),
+    country_name: str = typer.Option(
+        ...,
+        "--country-name",
+        "--C",
+        "-C",
+        envvar="SUBJECT_C",
+        help="Subject: Country name",
+    ),
+    state_name: str = typer.Option(
+        ...,
+        "--state-name",
+        "--ST",
+        "-ST",
+        envvar="SUBJECT_ST",
+        help="Subject: State name",
+    ),
+    locality_name: str = typer.Option(
+        ...,
+        "--locality-name",
+        "--L",
+        "-L",
+        envvar="SUBJECT_L",
+        help="Subject: Locality(city) name",
+    ),
+    organization_name: str = typer.Option(
+        ...,
+        "--organization-name",
+        "--O",
+        "-O",
+        envvar="SUBJECT_O",
+        help="Subject: Organization name",
+    ),
+    organization_unit_name: Optional[str] = typer.Option(
+        None,
+        "--organization-unit-name",
+        "--OU",
+        "-OU",
+        envvar="SUBJECT_OU",
+        help="Subject: Organization unit name",
+    ),
+    email_address: str = typer.Option(
+        ...,
+        "--email-address",
+        "-E",
+        envvar="SUBJECT_EMAIL",
+        help="Subject: Email address",
+    ),
+):
+    print(
+        f"CN: {common_name}  Valid: {valid_days}  SAN: {subject_alternative_names}  Domain: {append_domain}  Bits: {bits}"
+    )
+
+    # create a self-signed cert
+    cert = crypto.X509()
+    cert.get_subject().C = country_name
+    cert.get_subject().ST = state_name
+    cert.get_subject().L = locality_name
+    cert.get_subject().O = organization_name
+    if organization_unit_name:
+        cert.get_subject().OU = organization_unit_name
+    cert.get_subject().CN = common_name
+    cert.get_subject().emailAddress = email_address
+
+    if append_domain:
+        common_name = common_name + append_domain
+
+    san_list = [f"DNS:{common_name}".encode('ascii')]
+
+    if subject_alternative_names:
+        for san in subject_alternative_names:
+            if append_domain:
+                san = san + append_domain
+            if not san.startswith("DNS:"):
+                san = "DNS:" + san
+            san_list.append(san.encode('ascii'))
+
+    cert.add_extensions(
+        [
+            crypto.X509Extension(b"subjectAltName", False, b", ".join(san_list)),
+        ]
+    )
+
+    serialNumber=0  #@@@
+    cert.set_serial_number(serialNumber)
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(valid_days * 86500)
+    cert.set_issuer(cert.get_subject())
+
+    # create a key pair
+    k = crypto.PKey()
+    k.generate_key(crypto.TYPE_RSA, bits)
+
+    cert.set_pubkey(k)
+    cert.sign(k, digest)
+    with open(cert_file, "wt") as f:
+        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("utf-8"))
+    with open(key_file, "wt") as f:
+        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
+
+
+@app.command()
+def foo(common_name: str = typer.Argument(..., envvar="COMMON_NAME")):
+    pass
+
+
+if __name__ == "__main__":
+    app()
