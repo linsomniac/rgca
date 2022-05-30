@@ -77,7 +77,6 @@ def ca_key(
         prompt=True,
         confirmation_prompt=False,
         hide_input=True,
-        show_default="Current Password",
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
@@ -112,34 +111,41 @@ def ca_key(
         )
 
 
-@ca_app.command(name="showkey")
-def ca_showkey(
-    ca_key_file: str = typer.Argument(
-        ..., envvar="CA_KEY_FILE", help="File name to write private key to."
-    ),
-    passphrase: str = typer.Option(
-        ...,
-        envvar="CA_PASSPHRASE",
-        help="Passphrase for CA key",
-        prompt=True,
-        confirmation_prompt=False,
-        hide_input=True,
+@main_app.command(name="showkey")
+def main_showkey(
+    key_file: str = typer.Argument(
+        ..., envvar="KEY_FILE", help="Key file to show information about."
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
         "-P",
         help="Prompt for a passphrase, overriding the config or environment settings.",
     ),
+    passphrase: str = typer.Option(
+        None,
+        '-P',
+        envvar="PASSPHRASE",
+        help="Passphrase for key",
+    ),
+    no_passphrase: bool = typer.Option(
+        False,
+        "-N",
+        help="Do not put a passphrase on the key file.",
+    ),
 ):
     """Show CA key HELP"""
 
-    if prompt_for_passphrase:
+    if not no_passphrase and passphrase is None:
         passphrase = click.prompt("Passphrase", hide_input=True)
+    if passphrase:
+        passphrase = passphrase.encode("ascii")
+    if no_passphrase:
+        passphrase = None
 
-    with open(ca_key_file, "rt") as f:
+    with open(key_file, "rt") as f:
         try:
             key = crypto.load_privatekey(
-                crypto.FILETYPE_PEM, f.read(), passphrase=passphrase.encode("ascii")
+                crypto.FILETYPE_PEM, f.read(), passphrase=passphrase
             )
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
@@ -155,6 +161,23 @@ def ca_showkey(
     print(f"Bits: {key.bits()}  Type: {type_name}")
 
 
+def get_next_serial(path):
+    if not path:
+        return 0
+
+    if not path.exists():
+        with path.open('w') as fp:
+            fp.write('1\n')
+        return(0)
+
+    with path.open('r') as fp:
+        next_serial = int(fp.readline().strip(), 16)
+    with path.open('w') as fp:
+        fp.write(f'{next_serial+1:X}\n')
+    return next_serial
+
+
+
 @cert_app.command(name="gen")
 def cert(
     common_name: str = typer.Argument(
@@ -165,6 +188,13 @@ def cert(
     ),
     key_file: str = typer.Argument(
         ..., envvar="KEY_FILE", help="File name to write private key to."
+    ),
+    serial_file: Path = typer.Option(
+        None, envvar="SERIAL_FILE", help="File that has the next serial number in it.  "
+        "If undefined or a non-existant file, serial 0 is used."
+    ),
+    index_file: Path = typer.Option(
+        None, envvar="INDEX_FILE", help="File to write the certificate information to (ca database)."
     ),
     valid_days: Optional[int] = typer.Option(
         ...,
@@ -247,13 +277,20 @@ def cert(
         envvar="SUBJECT_EMAIL",
         help="Subject: Email address",
     ),
+    passphrase: str = typer.Option(
+        None,
+        '-P',
+        envvar="CERT_PASSPHRASE",
+        help="Passphrase for key",
+    ),
+    no_passphrase: bool = typer.Option(
+        False,
+        "-N",
+        help="Do not put a passphrase on the key file.",
+    ),
 ):
     """Cert HELP"""
-    print(
-        f"CN: {common_name}  Valid: {valid_days}  SAN: {subject_alternative_names}  Domain: {append_domain}  Bits: {bits}"
-    )
 
-    # create a self-signed cert
     cert = crypto.X509()
     cert.get_subject().C = country_name
     cert.get_subject().ST = state_name
@@ -283,22 +320,43 @@ def cert(
         ]
     )
 
-    serialNumber = 0  # @@@
-    cert.set_serial_number(serialNumber)
+    serial_number = get_next_serial(serial_file)
+    cert.set_serial_number(serial_number)
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(valid_days * 86500)
     cert.set_issuer(cert.get_subject())
 
-    # create a key pair
-    k = crypto.PKey()
-    k.generate_key(crypto.TYPE_RSA, bits)
+    if index_file:
+        cert_not_after = cert.get_notAfter().decode('ascii')[2:]
+        cert_dn = str(cert.get_subject()).split("'")[1]
+        ca_db_line = f'V\t{cert_not_after}\t\t{serial_number:X}\tunknown\t{cert_dn}\n'
 
-    cert.set_pubkey(k)
-    cert.sign(k, digest)
+        with index_file.open('a') as fp:
+            fp.write(ca_db_line)
+
+    # create a key pair
+    key = crypto.PKey()
+    key.generate_key(crypto.TYPE_RSA, bits)
+
+    if not no_passphrase and passphrase is None:
+        passphrase = click.prompt("Passphrase", hide_input=True)
+    if passphrase:
+        passphrase = passphrase.encode("ascii")
+    if no_passphrase:
+        passphrase = None
+
+    cert.set_pubkey(key)
+    cert.sign(key, digest)
     with open(cert_file, "wt") as f:
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("ascii"))
     with open(key_file, "wt") as f:
-        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("ascii"))
+        f.write(
+            crypto.dump_privatekey(
+                crypto.FILETYPE_PEM,
+                key,
+                passphrase=passphrase,
+            ).decode("ascii")
+        )
 
 
 if __name__ == "__main__":
