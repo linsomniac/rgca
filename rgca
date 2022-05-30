@@ -123,7 +123,7 @@ def main_showkey(
     ),
     passphrase: str = typer.Option(
         None,
-        '-P',
+        "-P",
         envvar="PASSPHRASE",
         help="Passphrase for key",
     ),
@@ -166,16 +166,15 @@ def get_next_serial(path):
         return 0
 
     if not path.exists():
-        with path.open('w') as fp:
-            fp.write('1\n')
-        return(0)
+        with path.open("w") as fp:
+            fp.write("1\n")
+        return 0
 
-    with path.open('r') as fp:
+    with path.open("r") as fp:
         next_serial = int(fp.readline().strip(), 16)
-    with path.open('w') as fp:
-        fp.write(f'{next_serial+1:X}\n')
+    with path.open("w") as fp:
+        fp.write(f"{next_serial+1:X}\n")
     return next_serial
-
 
 
 @cert_app.command(name="gen")
@@ -190,11 +189,15 @@ def cert(
         ..., envvar="KEY_FILE", help="File name to write private key to."
     ),
     serial_file: Path = typer.Option(
-        None, envvar="SERIAL_FILE", help="File that has the next serial number in it.  "
-        "If undefined or a non-existant file, serial 0 is used."
+        None,
+        envvar="SERIAL_FILE",
+        help="File that has the next serial number in it.  "
+        "If undefined or a non-existant file, serial 0 is used.",
     ),
     index_file: Path = typer.Option(
-        None, envvar="INDEX_FILE", help="File to write the certificate information to (ca database)."
+        None,
+        envvar="INDEX_FILE",
+        help="File to write the certificate information to (ca database).",
     ),
     valid_days: Optional[int] = typer.Option(
         ...,
@@ -279,7 +282,7 @@ def cert(
     ),
     passphrase: str = typer.Option(
         None,
-        '-P',
+        "-P",
         envvar="CERT_PASSPHRASE",
         help="Passphrase for key",
     ),
@@ -327,11 +330,11 @@ def cert(
     cert.set_issuer(cert.get_subject())
 
     if index_file:
-        cert_not_after = cert.get_notAfter().decode('ascii')[2:]
+        cert_not_after = cert.get_notAfter().decode("ascii")[2:]
         cert_dn = str(cert.get_subject()).split("'")[1]
-        ca_db_line = f'V\t{cert_not_after}\t\t{serial_number:X}\tunknown\t{cert_dn}\n'
+        ca_db_line = f"V\t{cert_not_after}\t\t{serial_number:X}\tunknown\t{cert_dn}\n"
 
-        with index_file.open('a') as fp:
+        with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
     # create a key pair
