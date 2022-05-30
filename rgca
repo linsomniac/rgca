@@ -46,7 +46,7 @@ def callback(
         ini.read_string(config.read_text())
         for k, v in ini["default"].items():
             envname = k.upper()
-            if not envname in os.environ:
+            if envname not in os.environ:
                 os.environ[envname] = v
 
 
@@ -298,7 +298,7 @@ def cert(
     cert.get_subject().C = country_name
     cert.get_subject().ST = state_name
     cert.get_subject().L = locality_name
-    cert.get_subject().O = organization_name
+    cert.get_subject().O = organization_name   # NOQA: E741
     if organization_unit_name:
         cert.get_subject().OU = organization_unit_name
     cert.get_subject().CN = common_name
