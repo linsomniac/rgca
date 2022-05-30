@@ -7,28 +7,155 @@ from pathlib import Path
 import os
 from configparser import ConfigParser
 import typer
+import click
 
-app = typer.Typer()
+main_app = typer.Typer()
+ca_app = typer.Typer()
+cert_app = typer.Typer()
+main_app.add_typer(ca_app, name="ca")
+main_app.add_typer(cert_app, name="cert")
+
 
 class MessageDigest(str, Enum):
     sha256 = "sha256"
     sha512 = "sha512"
 
 
-@app.callback()
-def callback(ctx: typer.Context,
-             config: Optional[Path] = typer.Option(None, envvar='CONFIG', help="Ini format config file"),
-             ):
-    '''Callback Docstring'''
+class Cipher(str, Enum):
+    des3 = "des3"
+    aes128 = "aes128"
+    aes192 = "aes192"
+    aes256 = "aes256"
+
+
+@main_app.callback()
+def callback(
+    ctx: typer.Context,
+    config: Optional[Path] = typer.Option(
+        None,
+        envvar="CONFIG",
+        help="Ini format config file",
+        dir_okay=False,
+        exists=False,
+        readable=True,
+    ),
+):
+    """Callback Docstring"""
     if config and config.exists():
         ini = ConfigParser()
         ini.read_string(config.read_text())
-        for k,v in ini['default'].items():
+        for k, v in ini["default"].items():
             envname = k.upper()
             if not envname in os.environ:
                 os.environ[envname] = v
 
-@app.command()
+
+@ca_app.command(name="key")
+def ca_key(
+    ca_key_file: str = typer.Argument(
+        ..., envvar="CA_KEY_FILE", help="File name to write private key to."
+    ),
+    bits: Optional[int] = typer.Option(
+        4096,
+        "--ca-key-bits",
+        "--bits",
+        "-b",
+        envvar="CA_KEY_BITS",
+        help="Size of generated key, in bits.",
+    ),
+    cipher: Optional[Cipher] = typer.Option(
+        Cipher.aes256,
+        "--cipher",
+        "-C",
+        envvar="CA_CIPHER",
+        help="Cipher to use to encrypt CA key.",
+    ),
+    passphrase: str = typer.Option(
+        ...,
+        envvar="CA_PASSPHRASE",
+        help="Passphrase for CA key",
+        prompt=True,
+        confirmation_prompt=False,
+        hide_input=True,
+        show_default="Current Password",
+    ),
+    prompt_for_passphrase: bool = typer.Option(
+        False,
+        "-P",
+        help="Prompt for a passphrase, overriding the config or environment settings.",
+    ),
+    overwrite: bool = typer.Option(
+        False, help="Overwrite the key file if it already exists."
+    ),
+):
+    """GenCA HELP"""
+    if not overwrite and os.path.exists(ca_key_file):
+        typer.echo(
+            'Key file already exists, will not overwrite without "--overwrite" option.'
+        )
+        raise typer.Exit(code=1)
+
+    if prompt_for_passphrase:
+        passphrase = click.prompt("Passphrase", hide_input=True)
+
+    key = crypto.PKey()
+    key.generate_key(crypto.TYPE_RSA, bits)
+
+    with open(ca_key_file, "wt") as f:
+        f.write(
+            crypto.dump_privatekey(
+                crypto.FILETYPE_PEM,
+                key,
+                cipher=cipher,
+                passphrase=passphrase.encode("ascii"),
+            ).decode("ascii")
+        )
+
+
+@ca_app.command(name="showkey")
+def ca_showkey(
+    ca_key_file: str = typer.Argument(
+        ..., envvar="CA_KEY_FILE", help="File name to write private key to."
+    ),
+    passphrase: str = typer.Option(
+        ...,
+        envvar="CA_PASSPHRASE",
+        help="Passphrase for CA key",
+        prompt=True,
+        confirmation_prompt=False,
+        hide_input=True,
+    ),
+    prompt_for_passphrase: bool = typer.Option(
+        False,
+        "-P",
+        help="Prompt for a passphrase, overriding the config or environment settings.",
+    ),
+):
+    """Show CA key HELP"""
+
+    if prompt_for_passphrase:
+        passphrase = click.prompt("Passphrase", hide_input=True)
+
+    with open(ca_key_file, "rt") as f:
+        try:
+            key = crypto.load_privatekey(
+                crypto.FILETYPE_PEM, f.read(), passphrase=passphrase.encode("ascii")
+            )
+        except crypto.Error as e:
+            error = " ".join(e.args[0][0])
+            typer.echo(f"Failed to load key: {error}")
+            raise typer.Exit(code=1)
+
+    type_name = str(key.type())
+    if key.type() == crypto.TYPE_RSA:
+        type_name = "RSA"
+    if key.type() == crypto.TYPE_DSA:
+        type_name = "DSA"
+
+    print(f"Bits: {key.bits()}  Type: {type_name}")
+
+
+@cert_app.command(name="gen")
 def cert(
     common_name: str = typer.Argument(
         ..., envvar="SUBJECT_CN", help="Main name on certificate"
@@ -121,6 +248,7 @@ def cert(
         help="Subject: Email address",
     ),
 ):
+    """Cert HELP"""
     print(
         f"CN: {common_name}  Valid: {valid_days}  SAN: {subject_alternative_names}  Domain: {append_domain}  Bits: {bits}"
     )
@@ -139,7 +267,7 @@ def cert(
     if append_domain:
         common_name = common_name + append_domain
 
-    san_list = [f"DNS:{common_name}".encode('ascii')]
+    san_list = [f"DNS:{common_name}".encode("ascii")]
 
     if subject_alternative_names:
         for san in subject_alternative_names:
@@ -147,7 +275,7 @@ def cert(
                 san = san + append_domain
             if not san.startswith("DNS:"):
                 san = "DNS:" + san
-            san_list.append(san.encode('ascii'))
+            san_list.append(san.encode("ascii"))
 
     cert.add_extensions(
         [
@@ -155,7 +283,7 @@ def cert(
         ]
     )
 
-    serialNumber=0  #@@@
+    serialNumber = 0  # @@@
     cert.set_serial_number(serialNumber)
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(valid_days * 86500)
@@ -168,15 +296,10 @@ def cert(
     cert.set_pubkey(k)
     cert.sign(k, digest)
     with open(cert_file, "wt") as f:
-        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("utf-8"))
+        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("ascii"))
     with open(key_file, "wt") as f:
-        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
-
-
-@app.command()
-def foo(common_name: str = typer.Argument(..., envvar="COMMON_NAME")):
-    pass
+        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("ascii"))
 
 
 if __name__ == "__main__":
-    app()
+    main_app()
