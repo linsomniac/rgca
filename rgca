@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Optional, List
+from typing import Optional, List, Union
 from enum import Enum
 from OpenSSL import crypto, SSL
 from pathlib import Path
@@ -50,8 +50,28 @@ def callback(
                 os.environ[envname] = v
 
 
-@ca_app.command(name="key")
-def ca_key(
+def get_passphrase(
+    passphrase: Union[str, None],
+    no_passphrase: bool,
+    prompt_for_passphrase: bool,
+    key_type: str,
+    confirm: bool=False,
+) -> Union[bytes, None]:
+    """@@@"""
+    retval = None
+
+    if no_passphrase:
+        return None
+    if prompt_for_passphrase or passphrase is None:
+        retval = click.prompt(f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm)
+    if type(retval) is str:
+        return retval.encode("ascii")
+
+    return retval
+
+
+@ca_app.command(name="newkey")
+def ca_newkey(
     ca_key_file: str = typer.Argument(
         ..., envvar="CA_KEY_FILE", help="File name to write private key to."
     ),
@@ -70,8 +90,8 @@ def ca_key(
         envvar="CA_CIPHER",
         help="Cipher to use to encrypt CA key.",
     ),
-    passphrase: str = typer.Option(
-        ...,
+    passphrase: Union[str, None] = typer.Option(
+        None,
         envvar="CA_PASSPHRASE",
         help="Passphrase for CA key",
         prompt=True,
@@ -80,8 +100,14 @@ def ca_key(
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
+        "--prompt-for-passphrase",
         "-P",
         help="Prompt for a passphrase, overriding the config or environment settings.",
+    ),
+    no_passphrase: bool = typer.Option(
+        False,
+        "-N",
+        help="Do not put a passphrase on the key file.",
     ),
     overwrite: bool = typer.Option(
         False, help="Overwrite the key file if it already exists."
@@ -94,8 +120,7 @@ def ca_key(
         )
         raise typer.Exit(code=1)
 
-    if prompt_for_passphrase:
-        passphrase = click.prompt("Passphrase", hide_input=True)
+    passphrase = get_passphrase(passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True)
 
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
@@ -118,11 +143,13 @@ def main_showkey(
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
+        "--prompt-for-passphrase",
         "-P",
         help="Prompt for a passphrase, overriding the config or environment settings.",
     ),
-    passphrase: str = typer.Option(
+    passphrase: Union[str, None] = typer.Option(
         None,
+        "--prompt-for-passphrase",
         "-P",
         envvar="PASSPHRASE",
         help="Passphrase for key",
@@ -133,14 +160,11 @@ def main_showkey(
         help="Do not put a passphrase on the key file.",
     ),
 ):
-    """Show CA key HELP"""
+    """Show key HELP"""
 
-    if not no_passphrase and passphrase is None:
-        passphrase = click.prompt("Passphrase", hide_input=True)
-    if passphrase:
-        passphrase = passphrase.encode("ascii")
-    if no_passphrase:
-        passphrase = None
+    passphrase = get_passphrase(
+        passphrase, no_passphrase, prompt_for_passphrase, "Keyfile"
+    )
 
     with open(key_file, "rt") as f:
         try:
@@ -177,7 +201,7 @@ def get_next_serial(path):
     return next_serial
 
 
-@cert_app.command(name="gen")
+@cert_app.command(name="new")
 def cert(
     common_name: str = typer.Argument(
         ..., envvar="SUBJECT_CN", help="Main name on certificate"
@@ -280,10 +304,17 @@ def cert(
         envvar="SUBJECT_EMAIL",
         help="Subject: Email address",
     ),
-    passphrase: str = typer.Option(
-        None,
+    prompt_for_passphrase: bool = typer.Option(
+        False,
+        "--prompt-for-passphrase",
         "-P",
-        envvar="CERT_PASSPHRASE",
+        help="Prompt for a passphrase, overriding the config or environment settings.",
+    ),
+    passphrase: Union[str, None] = typer.Option(
+        None,
+        "--passphrase",
+        "-P",
+        envvar="PASSPHRASE",
         help="Passphrase for key",
     ),
     no_passphrase: bool = typer.Option(
@@ -298,7 +329,7 @@ def cert(
     cert.get_subject().C = country_name
     cert.get_subject().ST = state_name
     cert.get_subject().L = locality_name
-    cert.get_subject().O = organization_name   # NOQA: E741
+    cert.get_subject().O = organization_name  # NOQA: E741
     if organization_unit_name:
         cert.get_subject().OU = organization_unit_name
     cert.get_subject().CN = common_name
@@ -337,16 +368,12 @@ def cert(
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
+    passphrase = get_passphrase(passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True)
+
     # create a key pair
+    print('Generating key, this may take a moment...')
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
-
-    if not no_passphrase and passphrase is None:
-        passphrase = click.prompt("Passphrase", hide_input=True)
-    if passphrase:
-        passphrase = passphrase.encode("ascii")
-    if no_passphrase:
-        passphrase = None
 
     cert.set_pubkey(key)
     cert.sign(key, digest)
