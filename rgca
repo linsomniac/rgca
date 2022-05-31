@@ -39,12 +39,19 @@ def callback(
         exists=False,
         readable=True,
     ),
+    config_group: str = typer.Option(
+        'DEFAULT',
+        envvar="CONFIG_GROUP",
+        help="Additional group to pull settings from.  If set, named group in the "
+                "config file will be loaded in addition to 'default'.",
+    ),
 ):
     """Callback Docstring"""
     if config and config.exists():
         ini = ConfigParser()
         ini.read_string(config.read_text())
-        for k, v in ini["default"].items():
+
+        for k, v in ini[config_group].items():
             envname = k.upper()
             if envname not in os.environ:
                 os.environ[envname] = v
@@ -55,7 +62,7 @@ def get_passphrase(
     no_passphrase: bool,
     prompt_for_passphrase: bool,
     key_type: str,
-    confirm: bool=False,
+    confirm: bool = False,
 ) -> Union[bytes, None]:
     """@@@"""
     retval = None
@@ -63,7 +70,9 @@ def get_passphrase(
     if no_passphrase:
         return None
     if prompt_for_passphrase or passphrase is None:
-        retval = click.prompt(f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm)
+        retval = click.prompt(
+            f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm
+        )
     if type(retval) is str:
         return retval.encode("ascii")
 
@@ -120,7 +129,9 @@ def ca_newkey(
         )
         raise typer.Exit(code=1)
 
-    passphrase = get_passphrase(passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True)
+    passphrase = get_passphrase(
+        passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True
+    )
 
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
@@ -368,10 +379,12 @@ def cert(
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
-    passphrase = get_passphrase(passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True)
+    passphrase = get_passphrase(
+        passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True
+    )
 
     # create a key pair
-    print('Generating key, this may take a moment...')
+    print("Generating key, this may take a moment...")
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
 
