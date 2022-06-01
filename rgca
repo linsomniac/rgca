@@ -65,7 +65,7 @@ def get_passphrase(
     confirm: bool = False,
 ) -> Union[bytes, None]:
     """@@@"""
-    retval = None
+    retval = passphrase
 
     if no_passphrase:
         return None
@@ -103,9 +103,6 @@ def ca_newkey(
         None,
         envvar="CA_PASSPHRASE",
         help="Passphrase for CA key",
-        prompt=True,
-        confirmation_prompt=False,
-        hide_input=True,
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
@@ -133,16 +130,17 @@ def ca_newkey(
         passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True
     )
 
+    if no_passphrase:
+        cipher = None
+
+    print("Generating key, this may take a moment...")
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
 
     with open(ca_key_file, "wt") as f:
         f.write(
             crypto.dump_privatekey(
-                crypto.FILETYPE_PEM,
-                key,
-                cipher=cipher,
-                passphrase=final_passphrase
+                crypto.FILETYPE_PEM, key, cipher=cipher, passphrase=final_passphrase
             ).decode("ascii")
         )
 
@@ -323,6 +321,13 @@ def cert(
         envvar="SUBJECT_EMAIL",
         help="Subject: Email address",
     ),
+    cipher: Optional[Cipher] = typer.Option(
+        Cipher.aes256,
+        "--cipher",
+        "-C",
+        envvar="CERT_CIPHER",
+        help="Cipher to use to encrypt certificate key.",
+    ),
     prompt_for_passphrase: bool = typer.Option(
         False,
         "--prompt-for-passphrase",
@@ -390,6 +395,8 @@ def cert(
     final_passphrase = get_passphrase(
         passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True
     )
+    if no_passphrase:
+        cipher = None
 
     # create a key pair
     print("Generating key, this may take a moment...")
@@ -405,6 +412,7 @@ def cert(
             crypto.dump_privatekey(
                 crypto.FILETYPE_PEM,
                 key,
+                cipher=cipher,
                 passphrase=final_passphrase,
             ).decode("ascii")
         )
