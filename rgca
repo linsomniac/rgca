@@ -84,8 +84,8 @@ def ca_newkey(
     ca_key_file: str = typer.Argument(
         ..., envvar="CA_KEY_FILE", help="File name to write private key to."
     ),
-    bits: Optional[int] = typer.Option(
-        4096,
+    bits: int = typer.Option(
+        8192,
         "--ca-key-bits",
         "--bits",
         "-b",
@@ -129,7 +129,7 @@ def ca_newkey(
         )
         raise typer.Exit(code=1)
 
-    passphrase = get_passphrase(
+    final_passphrase = get_passphrase(
         passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True
     )
 
@@ -142,7 +142,7 @@ def ca_newkey(
                 crypto.FILETYPE_PEM,
                 key,
                 cipher=cipher,
-                passphrase=passphrase.encode("ascii"),
+                passphrase=final_passphrase
             ).decode("ascii")
         )
 
@@ -173,14 +173,14 @@ def main_showkey(
 ):
     """Show key HELP"""
 
-    passphrase = get_passphrase(
+    final_passphrase = get_passphrase(
         passphrase, no_passphrase, prompt_for_passphrase, "Keyfile"
     )
 
     with open(key_file, "rt") as f:
         try:
             key = crypto.load_privatekey(
-                crypto.FILETYPE_PEM, f.read(), passphrase=passphrase
+                crypto.FILETYPE_PEM, f.read(), passphrase=final_passphrase
             )
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
@@ -197,14 +197,14 @@ def main_showkey(
 
 
 def get_next_serial(path: Path) -> int:
-    '''Load the next serial number from `path`.
+    """Load the next serial number from `path`.
 
     Args:
         path: File containing the next serial number in hex representation.
 
     Returns:
         The next serial number as integer.
-    '''
+    """
     if not path:
         return 0
 
@@ -263,7 +263,7 @@ def cert(
         help="Size of generated key, in bits.",
     ),
     digest: MessageDigest = typer.Option(
-        'sha512',
+        "sha512",
         "--digest",
         "-D",
         envvar="DIGEST",
