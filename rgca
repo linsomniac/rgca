@@ -40,10 +40,10 @@ def callback(
         readable=True,
     ),
     config_group: str = typer.Option(
-        'DEFAULT',
+        "DEFAULT",
         envvar="CONFIG_GROUP",
         help="Additional group to pull settings from.  If set, named group in the "
-                "config file will be loaded in addition to 'default'.",
+        "config file will be loaded in addition to 'default'.",
     ),
 ):
     """Callback Docstring"""
@@ -196,7 +196,15 @@ def main_showkey(
     print(f"Bits: {key.bits()}  Type: {type_name}")
 
 
-def get_next_serial(path):
+def get_next_serial(path: Path) -> int:
+    '''Load the next serial number from `path`.
+
+    Args:
+        path: File containing the next serial number in hex representation.
+
+    Returns:
+        The next serial number as integer.
+    '''
     if not path:
         return 0
 
@@ -234,8 +242,8 @@ def cert(
         envvar="INDEX_FILE",
         help="File to write the certificate information to (ca database).",
     ),
-    valid_days: Optional[int] = typer.Option(
-        ...,
+    valid_days: int = typer.Option(
+        365,
         "--valid-days",
         "-d",
         envvar="VALID_DAYS",
@@ -247,15 +255,15 @@ def cert(
         "-s",
         help="Subject alternative names for certificate, the Common Name is added to this list.",
     ),
-    bits: Optional[int] = typer.Option(
-        ...,
+    bits: int = typer.Option(
+        8192,
         "--bits",
         "-b",
         envvar="BITS",
         help="Size of generated key, in bits.",
     ),
-    digest: Optional[MessageDigest] = typer.Option(
-        ...,
+    digest: MessageDigest = typer.Option(
+        'sha512',
         "--digest",
         "-D",
         envvar="DIGEST",
@@ -374,12 +382,12 @@ def cert(
     if index_file:
         cert_not_after = cert.get_notAfter().decode("ascii")[2:]
         cert_dn = str(cert.get_subject()).split("'")[1]
-        ca_db_line = f"V\t{cert_not_after}\t\t{serial_number:X}\tunknown\t{cert_dn}\n"
+        ca_db_line = f"V\t{cert_not_after}\t\t{serial_number:X}\t{cert_file}\t{cert_dn}\n"
 
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
-    passphrase = get_passphrase(
+    final_passphrase = get_passphrase(
         passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True
     )
 
@@ -397,7 +405,7 @@ def cert(
             crypto.dump_privatekey(
                 crypto.FILETYPE_PEM,
                 key,
-                passphrase=passphrase,
+                passphrase=final_passphrase,
             ).decode("ascii")
         )
 
