@@ -6,6 +6,8 @@ from OpenSSL import crypto, SSL
 from pathlib import Path
 import os
 from configparser import ConfigParser
+import subprocess
+import shlex
 import typer
 import click
 
@@ -32,7 +34,7 @@ class Cipher(str, Enum):
 def callback(
     ctx: typer.Context,
     config: Optional[Path] = typer.Option(
-        None,
+        os.path.expanduser('~/.config/rgca/config.ini'),
         envvar="CONFIG",
         help="Ini format config file",
         dir_okay=False,
@@ -43,10 +45,55 @@ def callback(
         "DEFAULT",
         envvar="CONFIG_GROUP",
         help="Additional group to pull settings from.  If set, named group in the "
-        "config file will be loaded in addition to 'default'.",
+        "config file will be loaded in addition to 'DEFAULT'.",
     ),
 ):
-    """Callback Docstring"""
+    """rgca is a Certificate Authority helper, to make creating certificates, either from scripts
+    or from the CLI, easier.  All (reasonable) values can be passed either by CLI arguments, config
+    files, or the environment.  See the help for the sub commands for more information, but an example
+    use could be:
+
+        rgca cert new www.example.com www.crt www.key
+
+    The above command is incomplete, as it doesn't specify various Subject items like Country, Locality,
+    Organization, etc...  But if you run the above, it will tell you what is missing.  A more complete
+    run might look like:
+
+        rgca cert new --C US --ST Colorado --L Denver --O Example -E user@example.com \
+              www.example.com www.crt www.key
+
+    Or, if you specify subject items in a config file:
+
+        rgca --config config.ini cert new www.example.com www.crt www.key
+
+    It is compatible with OpenSSL commands (including managing the "serial" and "index.txt" files).
+
+    A config file may be specified in "INI" format.  There is a "DEFAULT" group that is always read,
+    and other sections may be selected using the "--config-group" option, so that multiple
+    configurations may be easliy switched between.
+
+    Values may also be set using the environment.  Options that can be set from the environment are
+    listed in the help related to those options.
+
+    For example, take this "config.ini":
+
+        [DEFAULT]
+        SUBJECT_C=US
+        SUBJECT_ST=Colorado
+        SUBJECT_L=Denver
+        SUBJECT_O=Example
+        SUBJECT_OU=Corporate
+        SUBJECT_EMAIL=admin@example.com
+
+        [widget]
+        SUBJECT_OU=Widgets
+        SUBJECT_EMAIL=admin@widgets.example.com
+
+    Then you can run it with:
+
+        rgca --config config.ini cert new www.example.com www.crt www.key
+        rgca --config config.ini --config-group widget cert new widgets.example.com widgets.crt widgets.key
+    """
     if config and config.exists():
         ini = ConfigParser()
         ini.read_string(config.read_text())
@@ -95,7 +142,7 @@ def ca_newkey(
     cipher: Optional[Cipher] = typer.Option(
         Cipher.aes256,
         "--cipher",
-        "-C",
+        "-c",
         envvar="CA_CIPHER",
         help="Cipher to use to encrypt CA key.",
     ),
@@ -218,6 +265,23 @@ def get_next_serial(path: Path) -> int:
     return next_serial
 
 
+def run_deploy(deploy_command: str, env: dict) -> int:
+    """Run the deploy command to deliver keys.
+
+    Args:
+        - deploy_command: Command to run to do a deploy.  This is parsed with shlex.split().
+        - env: Environment values set before running.
+
+    Returns:
+        0 on success, process exit code on failure.
+    """
+    try:
+        subprocess.run(shlex.split(deploy_command), check=True, env=env)
+        return 0
+    except subprocess.CalledProcessError as e:
+        return e.returncode
+
+
 @cert_app.command(name="new")
 def cert(
     common_name: str = typer.Argument(
@@ -245,13 +309,14 @@ def cert(
         "--valid-days",
         "-d",
         envvar="VALID_DAYS",
-        help="Number of days the certificate is valid for",
+        help="Number of days the certificate is valid for.",
     ),
     subject_alternative_names: Optional[List[str]] = typer.Option(
         None,
         "--san",
         "-s",
-        help="Subject alternative names for certificate, the Common Name is added to this list.",
+        help="Subject alternative name to add to the certificate.  The Common Name is "
+                "listed as the first SAN.",
     ),
     bits: int = typer.Option(
         8192,
@@ -265,14 +330,17 @@ def cert(
         "--digest",
         "-D",
         envvar="DIGEST",
-        help="Message digest to use.",
+        help="Message digest to use when signing the key.",
     ),
     append_domain: Optional[str] = typer.Option(
         None,
         "--append-domain",
         "-a",
         envvar="APPEND_DOMAIN",
-        help="If provided, this value is appended to all domain names (CN, SAN) so short names can be used.",
+        help="If provided, this value is appended to all domain names (CN, SAN) so "
+                "short names can be used.  For example this creates a web.example.com "
+                "cert without having to repeat '.example.com' all over: rgca cert new "
+                "--append-domain example.com --san test --san foo web web.crt web.key",
     ),
     country_name: str = typer.Option(
         ...,
@@ -317,6 +385,7 @@ def cert(
     email_address: str = typer.Option(
         ...,
         "--email-address",
+        "--E",
         "-E",
         envvar="SUBJECT_EMAIL",
         help="Subject: Email address",
@@ -324,30 +393,85 @@ def cert(
     cipher: Optional[Cipher] = typer.Option(
         Cipher.aes256,
         "--cipher",
-        "-C",
+        "-c",
         envvar="CERT_CIPHER",
-        help="Cipher to use to encrypt certificate key.",
+        help="Cipher to use to encrypt certificate key.  This is only used if a "
+                "passphrase is specified.",
+    ),
+    ca_file: str = typer.Option(
+        ..., envvar="CA_FILE", help="File name of the CA key, if specified the "
+                "generated cert is signed with this key.  If not specified, the cert "
+                "is unsigned."
+    ),
+    ca_passphrase: Union[str, None] = typer.Option(
+        None,
+        "--ca-passphrase",
+        envvar="CA_PASSPHRASE",
+        help="Passphrase to decrypt the key.  If not specified, and the key is "
+                "encrypted, a passphrase will be prompted for.",
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
         "--prompt-for-passphrase",
         "-P",
-        help="Prompt for a passphrase, overriding the config or environment settings.",
+        help="Prompt for a passphrase, overriding the config or environment settings.  "
+                "Is overridden by --no-passphrase.",
     ),
     passphrase: Union[str, None] = typer.Option(
         None,
         "--passphrase",
         "-P",
         envvar="PASSPHRASE",
-        help="Passphrase for key",
+        help="Passphrase to encrypt the key.",
     ),
     no_passphrase: bool = typer.Option(
         False,
+        "--no-passphrase",
         "-N",
-        help="Do not put a passphrase on the key file.",
+        help="Do not put a passphrase on the key file.  This overrides settings in the "
+                "config/environment/CLI for --passphrase/--prompt-for-passphrase.",
+    ),
+    deploy: bool = typer.Option(
+        False,
+        envvar="DEPLOY",
+        help="Use '--deploy-command' to deploy key/cert after generation.",
+    ),
+    deploy_command: str = typer.Option(
+        None,
+        "--deploy-command",
+        envvar="DEPLOY_COMMAND",
+        help="Command to run to deploy cert/key after generation.",
     ),
 ):
-    """Cert HELP"""
+    """Create a new certificate signed by the CA key.
+
+    This is compatible with the OpenSSL CA tools, and can read and write "serial"
+    and "index.txt" files as used by OpenSSL.
+
+    Various values for the certificate are given by the options marked with "Subject:".
+    Options may be specified from the CLI, environment, or config file (in order
+    of what overrides, with CLI overriding environment, then config).  See
+    "rgca --help" for more information on the config file.
+
+    If --deploy is set, the command given to --deploy-command is run after the
+    certificate has been generated.  It is called with these environment variables
+    set:
+
+    DEPLOY: The string "CERT_NEW".
+
+    FILES: A space separated list of the files generated.
+
+    CERT_FILE: The certificate file.
+
+    KEY_FILE: The key file.
+    """
+
+    if deploy and deploy_command is None:
+        typer.echo(
+            "If run with '--deploy', a '--deploy-command' must be specified (can "
+            "also be via environment or config DEPLOY_COMMAND)."
+        )
+        raise typer.Exit(1)
 
     cert = crypto.X509()
     cert.get_subject().C = country_name
@@ -384,6 +508,23 @@ def cert(
     cert.gmtime_adj_notAfter(valid_days * 86500)
     cert.set_issuer(cert.get_subject())
 
+    if ca_file:
+        with open(ca_file, 'rt') as f:
+            capass = ca_passphrase
+            def askcapass(_) -> bytes:
+                return click.prompt("CA Passphrase to sign key", hide_input=True).encode('ascii')
+            if ca_passphrase is None:
+                capass = askcapass
+            if type(capass) is str:
+                capass = capass.encode('ascii')
+
+            try:
+                ca_key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), passphrase=capass)
+            except crypto.Error as e:
+                error = " ".join(e.args[0][0])
+                typer.echo(f"Failed to load CA key: {error}")
+                raise typer.Exit(code=1)
+
     if index_file:
         cert_not_after = cert.get_notAfter().decode("ascii")[2:]
         cert_dn = str(cert.get_subject()).split("'")[1]
@@ -402,9 +543,10 @@ def cert(
     print("Generating key, this may take a moment...")
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
-
     cert.set_pubkey(key)
-    cert.sign(key, digest)
+
+    cert.sign(ca_key, digest)
+
     with open(cert_file, "wt") as f:
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("ascii"))
     with open(key_file, "wt") as f:
@@ -416,6 +558,20 @@ def cert(
                 passphrase=final_passphrase,
             ).decode("ascii")
         )
+
+    if deploy:
+        retval = run_deploy(
+            deploy_command,
+            {
+                "DEPLOY": "CERT_NEW",
+                "CERT_FILE": cert_file,
+                "KEY_FILE": key_file,
+                "FILES": key_file + " " + cert_file,
+            },
+        )
+        if retval != 0:
+            typer.echo(f"Deploy command failed, returned {retval} instead of 0")
+            raise typer.Exit(1)
 
 
 if __name__ == "__main__":
