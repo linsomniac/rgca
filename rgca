@@ -54,14 +54,13 @@ def callback(
     files, or the environment.  See the help for the sub commands for more information, but an example
     use could be:
 
-        rgca cert new www.example.com www.crt www.key
+        rgca cert new www.example.com
 
     The above command is incomplete, as it doesn't specify various Subject items like Country, Locality,
     Organization, etc...  But if you run the above, it will tell you what is missing.  A more complete
     run might look like:
 
-        rgca cert new --C US --ST Colorado --L Denver --O Example -E user@example.com \
-              www.example.com www.crt www.key
+        rgca cert new --C US --ST Colorado --L Denver --O Example -E user@example.com www.example.com
 
     Or, if you specify subject items in a config file:
 
@@ -290,13 +289,15 @@ def cert(
     ),
     cert_file: str = typer.Option(
         "{{ SUBJECT_CN }}.crt",
-        envvar="CERT_FILE", help="File name to write certificate to.  This name can be "
-                "jinja2 templated from the environment."
+        envvar="CERT_FILE",
+        help="File name to write certificate to.  This name can be "
+        "jinja2 templated from the environment.",
     ),
     key_file: str = typer.Option(
         "{{ SUBJECT_CN }}.key",
-        envvar="KEY_FILE", help="File name to write private key to.  This name can be "
-                "jinja2 templated from the environment."
+        envvar="KEY_FILE",
+        help="File name to write private key to.  This name can be "
+        "jinja2 templated from the environment.",
     ),
     serial_file: Path = typer.Option(
         None,
@@ -480,7 +481,7 @@ def cert(
         )
         raise typer.Exit(1)
 
-    os.environ['SUBJECT_CN'] = common_name
+    os.environ["SUBJECT_CN"] = common_name
     cert_file = Template(cert_file).render(os.environ)
     key_file = Template(key_file).render(os.environ)
 
