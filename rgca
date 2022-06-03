@@ -34,7 +34,7 @@ class Cipher(str, Enum):
 def callback(
     ctx: typer.Context,
     config: Optional[Path] = typer.Option(
-        os.path.expanduser('~/.config/rgca/config.ini'),
+        os.path.expanduser("~/.config/rgca/config.ini"),
         envvar="CONFIG",
         help="Ini format config file",
         dir_okay=False,
@@ -316,7 +316,7 @@ def cert(
         "--san",
         "-s",
         help="Subject alternative name to add to the certificate.  The Common Name is "
-                "listed as the first SAN.",
+        "listed as the first SAN.",
     ),
     bits: int = typer.Option(
         8192,
@@ -338,9 +338,9 @@ def cert(
         "-a",
         envvar="APPEND_DOMAIN",
         help="If provided, this value is appended to all domain names (CN, SAN) so "
-                "short names can be used.  For example this creates a web.example.com "
-                "cert without having to repeat '.example.com' all over: rgca cert new "
-                "--append-domain example.com --san test --san foo web web.crt web.key",
+        "short names can be used.  For example this creates a web.example.com "
+        "cert without having to repeat '.example.com' all over: rgca cert new "
+        "--append-domain example.com --san test --san foo web web.crt web.key",
     ),
     country_name: str = typer.Option(
         ...,
@@ -396,26 +396,28 @@ def cert(
         "-c",
         envvar="CERT_CIPHER",
         help="Cipher to use to encrypt certificate key.  This is only used if a "
-                "passphrase is specified.",
+        "passphrase is specified.",
     ),
     ca_file: str = typer.Option(
-        ..., envvar="CA_FILE", help="File name of the CA key, if specified the "
-                "generated cert is signed with this key.  If not specified, the cert "
-                "is unsigned."
+        ...,
+        envvar="CA_KEY_FILE",
+        help="File name of the CA key, if specified the "
+        "generated cert is signed with this key.  If not specified, the cert "
+        "is unsigned.",
     ),
     ca_passphrase: Union[str, None] = typer.Option(
         None,
         "--ca-passphrase",
         envvar="CA_PASSPHRASE",
         help="Passphrase to decrypt the key.  If not specified, and the key is "
-                "encrypted, a passphrase will be prompted for.",
+        "encrypted, a passphrase will be prompted for.",
     ),
     prompt_for_passphrase: bool = typer.Option(
         False,
         "--prompt-for-passphrase",
         "-P",
         help="Prompt for a passphrase, overriding the config or environment settings.  "
-                "Is overridden by --no-passphrase.",
+        "Is overridden by --no-passphrase.",
     ),
     passphrase: Union[str, None] = typer.Option(
         None,
@@ -429,7 +431,7 @@ def cert(
         "--no-passphrase",
         "-N",
         help="Do not put a passphrase on the key file.  This overrides settings in the "
-                "config/environment/CLI for --passphrase/--prompt-for-passphrase.",
+        "config/environment/CLI for --passphrase/--prompt-for-passphrase.",
     ),
     deploy: bool = typer.Option(
         False,
@@ -509,17 +511,23 @@ def cert(
     cert.set_issuer(cert.get_subject())
 
     if ca_file:
-        with open(ca_file, 'rt') as f:
+        with open(ca_file, "rt") as f:
             capass = ca_passphrase
+
             def askcapass(_) -> bytes:
-                return click.prompt("CA Passphrase to sign key", hide_input=True).encode('ascii')
+                return click.prompt("CA Passphrase to sign key", hide_input=True).encode(
+                    "ascii"
+                )
+
             if ca_passphrase is None:
                 capass = askcapass
             if type(capass) is str:
-                capass = capass.encode('ascii')
+                capass = capass.encode("ascii")
 
             try:
-                ca_key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), passphrase=capass)
+                ca_key = crypto.load_privatekey(
+                    crypto.FILETYPE_PEM, f.read(), passphrase=capass
+                )
             except crypto.Error as e:
                 error = " ".join(e.args[0][0])
                 typer.echo(f"Failed to load CA key: {error}")
