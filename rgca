@@ -10,6 +10,7 @@ import subprocess
 import shlex
 import typer
 import click
+from jinja2 import Template
 
 main_app = typer.Typer()
 ca_app = typer.Typer()
@@ -287,11 +288,15 @@ def cert(
     common_name: str = typer.Argument(
         ..., envvar="SUBJECT_CN", help="Main name on certificate"
     ),
-    cert_file: str = typer.Argument(
-        ..., envvar="CERT_FILE", help="File name to write certificate to."
+    cert_file: str = typer.Option(
+        "{{ SUBJECT_CN }}.crt",
+        envvar="CERT_FILE", help="File name to write certificate to.  This name can be "
+                "jinja2 templated from the environment."
     ),
-    key_file: str = typer.Argument(
-        ..., envvar="KEY_FILE", help="File name to write private key to."
+    key_file: str = typer.Option(
+        "{{ SUBJECT_CN }}.key",
+        envvar="KEY_FILE", help="File name to write private key to.  This name can be "
+                "jinja2 templated from the environment."
     ),
     serial_file: Path = typer.Option(
         None,
@@ -474,6 +479,10 @@ def cert(
             "also be via environment or config DEPLOY_COMMAND)."
         )
         raise typer.Exit(1)
+
+    os.environ['SUBJECT_CN'] = common_name
+    cert_file = Template(cert_file).render(os.environ)
+    key_file = Template(key_file).render(os.environ)
 
     cert = crypto.X509()
     cert.get_subject().C = country_name
