@@ -341,10 +341,10 @@ def run_post_script(run_post: bool, post_command: str, add_env: dict = {}) -> No
 
 
 def load_ca_key(ca_key_file: str, ca_passphrase: Union[str, None]) -> crypto.PKey:
-    '''Load the CA private key, asking for passphrase if necessary.
+    """Load the CA private key, asking for passphrase if necessary.
 
     Returns:
-        The key that was loaded.'''
+        The key that was loaded."""
     with open(ca_key_file, "rt") as f:
         capass = ca_passphrase
 
