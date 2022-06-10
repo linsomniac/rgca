@@ -24,6 +24,10 @@ class MessageDigest(str, Enum):
     sha512 = "sha512"
 
 
+class CertType(str, Enum):
+    server = "server"
+
+
 class Cipher(str, Enum):
     des3 = "des3"
     aes128 = "aes128"
@@ -44,6 +48,9 @@ def callback(
     ),
     config_group: str = typer.Option(
         "DEFAULT",
+        "--config-group",
+        "--type",
+        "-G",
         envvar="CONFIG_GROUP",
         help="Additional group to pull settings from.  If set, named group in the "
         "config file will be loaded in addition to 'DEFAULT'.",
@@ -265,25 +272,104 @@ def get_next_serial(path: Path) -> int:
     return next_serial
 
 
-def run_deploy(deploy_command: str, env: dict) -> int:
-    """Run the deploy command to deliver keys.
+def run_script(script_command: str, env: dict) -> int:
+    """Run the pre/post script command to deliver keys.
 
     Args:
-        - deploy_command: Command to run to do a deploy.  This is parsed with shlex.split().
+        - script_command: Command to pre/post processes.  This is parsed with shlex.split().
         - env: Environment values set before running.
 
     Returns:
         0 on success, process exit code on failure.
     """
+    merged_env = os.environ.copy()
+    merged_env.update(env)
     try:
-        subprocess.run(shlex.split(deploy_command), check=True, env=env)
+        subprocess.run(shlex.split(script_command), check=True, env=merged_env)
         return 0
     except subprocess.CalledProcessError as e:
         return e.returncode
 
 
+def check_pre_post_args(
+    run_pre: bool, pre_command: str, run_post: bool, post_command: str
+) -> None:
+    """Check the pre and post arguments to make sure they are valid."""
+    if run_pre and pre_command is None:
+        typer.echo(
+            "If run with '--run-pre', a '--pre-command' must be specified (can "
+            "also be via environment or config PRE_COMMAND)."
+        )
+        raise typer.Exit(1)
+    if run_post and post_command is None:
+        typer.echo(
+            "If run with '--run-post', a '--post-command' must be specified (can "
+            "also be via environment or config POST_COMMAND)."
+        )
+        raise typer.Exit(1)
+
+
+def run_pre_script(run_pre: bool, pre_command: str, add_env: dict = {}) -> None:
+    """Run the pre script if arguments specify it.
+
+    Args:
+        run_pre: Should the pre script be run.
+        pre_command: The command that specifies the pre script.
+        add_env: Environment values to be set for command run.
+    """
+
+    if run_pre:
+        retval = run_script(os.path.expanduser(pre_command), add_env)
+        if retval != 0:
+            typer.echo(f"Pre command failed, returned {retval} instead of 0")
+            raise typer.Exit(1)
+
+
+def run_post_script(run_post: bool, post_command: str, add_env: dict = {}) -> None:
+    """Run the post script if arguments specify it.
+
+    Args:
+        run_post: Should the post script be run.
+        post_command: The command that specifies the post script.
+        add_env: Environment values to be set for command run.
+    """
+    if run_post:
+        retval = run_script(os.path.expanduser(post_command), add_env)
+        if retval != 0:
+            typer.echo(f"Post command failed, returned {retval} instead of 0")
+            raise typer.Exit(1)
+
+
+def load_ca_key(ca_key_file: str, ca_passphrase: Union[str, None]) -> crypto.PKey:
+    '''Load the CA private key, asking for passphrase if necessary.
+
+    Returns:
+        The key that was loaded.'''
+    with open(ca_key_file, "rt") as f:
+        capass = ca_passphrase
+
+        def askcapass(_) -> bytes:
+            return click.prompt("CA Passphrase to sign key", hide_input=True).encode(
+                "ascii"
+            )
+
+        if ca_passphrase is None:
+            capass = askcapass
+        if type(capass) is str:
+            capass = capass.encode("ascii")
+
+        try:
+            return crypto.load_privatekey(
+                crypto.FILETYPE_PEM, f.read(), passphrase=capass
+            )
+        except crypto.Error as e:
+            error = " ".join(e.args[0][0])
+            typer.echo(f"Failed to load CA key: {error}")
+            raise typer.Exit(code=1)
+
+
 @cert_app.command(name="new")
-def cert(
+def cert_new(
     common_name: str = typer.Argument(
         ..., envvar="SUBJECT_CN", help="Main name on certificate"
     ),
@@ -404,7 +490,14 @@ def cert(
         help="Cipher to use to encrypt certificate key.  This is only used if a "
         "passphrase is specified.",
     ),
-    ca_file: str = typer.Option(
+    ca_cert_file: str = typer.Option(
+        ...,
+        envvar="CA_CERT_FILE",
+        help="File name of the CA certificate, if specified the "
+        "generated cert is issued using this certificate.  This needs to be specified "
+        "to properly be marked as being issued by the CA.",
+    ),
+    ca_key_file: str = typer.Option(
         ...,
         envvar="CA_KEY_FILE",
         help="File name of the CA key, if specified the "
@@ -436,19 +529,36 @@ def cert(
         False,
         "--no-passphrase",
         "-N",
+        envvar="NO_PASSPHRASE",
         help="Do not put a passphrase on the key file.  This overrides settings in the "
         "config/environment/CLI for --passphrase/--prompt-for-passphrase.",
     ),
-    deploy: bool = typer.Option(
+    run_pre: bool = typer.Option(
         False,
-        envvar="DEPLOY",
-        help="Use '--deploy-command' to deploy key/cert after generation.",
+        envvar="RUN_PRE",
+        help="Use '--pre-command' before certificate generation.",
     ),
-    deploy_command: str = typer.Option(
+    pre_command: str = typer.Option(
         None,
-        "--deploy-command",
-        envvar="DEPLOY_COMMAND",
-        help="Command to run to deploy cert/key after generation.",
+        "--pre-command",
+        envvar="PRE_COMMAND",
+        help="Command to run to before starting certificate generation.",
+    ),
+    run_post: bool = typer.Option(
+        False,
+        envvar="RUN_POST",
+        help="Use '--post-command' to post-process key/cert after generation.",
+    ),
+    post_command: str = typer.Option(
+        None,
+        "--post-command",
+        envvar="POST_COMMAND",
+        help="Command to run to post-process cert/key after generation.",
+    ),
+    cert_type: CertType = typer.Option(
+        "server",
+        envvar="CERT_TYPE",
+        help="Type of certificate to generate.",
     ),
 ):
     """Create a new certificate signed by the CA key.
@@ -461,11 +571,12 @@ def cert(
     of what overrides, with CLI overriding environment, then config).  See
     "rgca --help" for more information on the config file.
 
-    If --deploy is set, the command given to --deploy-command is run after the
-    certificate has been generated.  It is called with these environment variables
-    set:
+    If --run-pre is set, the command given to --pre-command is run before certificate
+    generation is started.  If --run-post is set, the command given to --post-command
+    is run after the certificate has been generated.  They are called with these
+    environment variables set:
 
-    DEPLOY: The string "CERT_NEW".
+    SCRIPT_TYPE: The string "CERT_NEW".
 
     FILES: A space separated list of the files generated.
 
@@ -474,18 +585,28 @@ def cert(
     KEY_FILE: The key file.
     """
 
-    if deploy and deploy_command is None:
-        typer.echo(
-            "If run with '--deploy', a '--deploy-command' must be specified (can "
-            "also be via environment or config DEPLOY_COMMAND)."
-        )
-        raise typer.Exit(1)
-
     os.environ["SUBJECT_CN"] = common_name
+    os.environ["CERT_FILE"] = cert_file
+    os.environ["KEY_FILE"] = key_file
+    os.environ["FILES"] = key_file + " " + cert_file
+
+    check_pre_post_args(run_pre, pre_command, run_post, post_command)
+    run_pre_script(run_pre, pre_command, {"SCRIPT_TYPE": "CERT_NEW"})
+
     cert_file = Template(cert_file).render(os.environ)
     key_file = Template(key_file).render(os.environ)
 
+    ca_cert = None
+    if ca_cert_file:
+        with open(ca_cert_file, "rt") as f:
+            ca_cert = crypto.load_certificate(
+                crypto.FILETYPE_PEM, f.read().encode("ascii")
+            )
+    if ca_key_file:
+        ca_key = load_ca_key(ca_key_file, ca_passphrase)
+
     cert = crypto.X509()
+    cert.set_version(2)
     cert.get_subject().C = country_name
     cert.get_subject().ST = state_name
     cert.get_subject().L = locality_name
@@ -508,40 +629,33 @@ def cert(
                 san = "DNS:" + san
             san_list.append(san.encode("ascii"))
 
-    cert.add_extensions(
-        [
-            crypto.X509Extension(b"subjectAltName", False, b", ".join(san_list)),
-        ]
+    certExtensions = []
+    if cert_type == "server":
+        # certExtensions.append(crypto.X509Extension(b"extendedKeyUsage", True, b"serverAuth"))
+        certExtensions.append(crypto.X509Extension(b"nsCertType", False, b"server"))
+        certExtensions.append(
+            crypto.X509Extension(b"basicConstraints", False, b"CA:FALSE")
+        )
+        certExtensions.append(
+            crypto.X509Extension(
+                b"keyUsage",
+                False,
+                b"Digital Signature, Non Repudiation, Key Encipherment",
+            )
+        )
+
+    certExtensions.append(
+        crypto.X509Extension(b"subjectAltName", False, b", ".join(san_list))
     )
+
+    cert.add_extensions(certExtensions)
 
     serial_number = get_next_serial(serial_file)
     cert.set_serial_number(serial_number)
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(valid_days * 86500)
-    cert.set_issuer(cert.get_subject())
-
-    if ca_file:
-        with open(ca_file, "rt") as f:
-            capass = ca_passphrase
-
-            def askcapass(_) -> bytes:
-                return click.prompt("CA Passphrase to sign key", hide_input=True).encode(
-                    "ascii"
-                )
-
-            if ca_passphrase is None:
-                capass = askcapass
-            if type(capass) is str:
-                capass = capass.encode("ascii")
-
-            try:
-                ca_key = crypto.load_privatekey(
-                    crypto.FILETYPE_PEM, f.read(), passphrase=capass
-                )
-            except crypto.Error as e:
-                error = " ".join(e.args[0][0])
-                typer.echo(f"Failed to load CA key: {error}")
-                raise typer.Exit(code=1)
+    if ca_cert:
+        cert.set_issuer(ca_cert.get_issuer())
 
     if index_file:
         cert_not_after = cert.get_notAfter().decode("ascii")[2:]
@@ -554,8 +668,12 @@ def cert(
     final_passphrase = get_passphrase(
         passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True
     )
-    if no_passphrase:
+
+    dump_cert_args = {"cipher": cipher, "passphrase": final_passphrase}
+    if no_passphrase or not final_passphrase:
         cipher = None
+        del dump_cert_args["cipher"]
+        del dump_cert_args["passphrase"]
 
     # create a key pair
     print("Generating key, this may take a moment...")
@@ -566,30 +684,16 @@ def cert(
     cert.sign(ca_key, digest)
 
     with open(cert_file, "wt") as f:
+        f.write(crypto.dump_certificate(crypto.FILETYPE_TEXT, cert).decode("ascii"))
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("ascii"))
     with open(key_file, "wt") as f:
         f.write(
-            crypto.dump_privatekey(
-                crypto.FILETYPE_PEM,
-                key,
-                cipher=cipher,
-                passphrase=final_passphrase,
-            ).decode("ascii")
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **dump_cert_args).decode(
+                "ascii"
+            )
         )
 
-    if deploy:
-        retval = run_deploy(
-            deploy_command,
-            {
-                "DEPLOY": "CERT_NEW",
-                "CERT_FILE": cert_file,
-                "KEY_FILE": key_file,
-                "FILES": key_file + " " + cert_file,
-            },
-        )
-        if retval != 0:
-            typer.echo(f"Deploy command failed, returned {retval} instead of 0")
-            raise typer.Exit(1)
+    run_post_script(run_post, post_command, {"SCRIPT_TYPE": "CERT_NEW"})
 
 
 if __name__ == "__main__":
