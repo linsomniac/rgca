@@ -38,8 +38,8 @@ class Cipher(str, Enum):
 @main_app.callback()
 def callback(
     ctx: typer.Context,
-    config: Optional[Path] = typer.Option(
-        os.path.expanduser("~/.config/rgca/config.ini"),
+    config: Optional[List[Path]] = typer.Option(
+        [os.path.expanduser("~/.config/rgca/config.ini"), ".rgca.ini"],
         envvar="CONFIG",
         help="Ini format config file",
         dir_okay=False,
@@ -49,7 +49,7 @@ def callback(
     config_group: str = typer.Option(
         "DEFAULT",
         "--config-group",
-        "--type",
+        "--group",
         "-G",
         envvar="CONFIG_GROUP",
         help="Additional group to pull settings from.  If set, named group in the "
@@ -101,14 +101,18 @@ def callback(
         rgca --config config.ini cert new www.example.com www.crt www.key
         rgca --config config.ini --config-group widget cert new widgets.example.com widgets.crt widgets.key
     """
-    if config and config.exists():
-        ini = ConfigParser()
-        ini.read_string(config.read_text())
+    if not config:
+        return
 
-        for k, v in ini[config_group].items():
-            envname = k.upper()
-            if envname not in os.environ:
-                os.environ[envname] = v
+    for config_file in config:
+        if config_file.exists():
+            ini = ConfigParser()
+            ini.read_string(config_file.read_text())
+
+            for k, v in ini[config_group].items():
+                envname = k.upper()
+                if envname not in os.environ:
+                    os.environ[envname] = v
 
 
 def get_passphrase(

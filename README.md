@@ -29,6 +29,45 @@ What does not work:
   - Features for signing CSR, creating CSRs, generating new certs off existing ones,
     CRL management.
 
+## Examples
+
+Given a config file that looks like:
+
+    [DEFAULT]
+    SUBJECT_C=US
+    SUBJECT_ST=Colorado
+    SUBJECT_L=Denver
+    SUBJECT_O=ExampleCorp
+    SUBJECT_OU=
+    SUBJECT_EMAIL=certs@example.com
+    BITS=8192
+    CA_KEY_FILE=ca.key
+    CA_CERT_FILE=ca.crt
+    CERT_FILE={{SUBJECT_CN}}.crt
+    KEY_FILE={{SUBJECT_CN}}.key
+
+    [dev]
+    SUBJECT_OU=ExampleDevs
+    VALID_DAYS=1095
+    RUN_POST=yes
+    POST_COMMAND=mail-to-dev
+
+    [server]
+    SUBJECT_OU=Webmaster
+    RUN_POST=yes
+    POST_COMMAND=deploy-to-server
+
+Some example commands to create certificates:
+
+    #  Create a dev cert for dev1.example.com
+    rgca --config-group dev cert new dev1.example.com
+    #  Create a dev cert with a san
+    rgca --config-group dev cert new --san devtest.example.com dev2.example.com
+    #  Create a dev cert with several sans, using "append domain" to reduce duplication
+    rgca --config-group dev cert new --append-domain example.com --san foo --san bar dev3
+    #  Create a server cert (using the "server" group in the config file)
+    rgca --config-group server cert new --san example.com www.example.com
+
 ## rgca --help
 
     Usage: rgca [OPTIONS] COMMAND [ARGS]...
@@ -80,7 +119,7 @@ What does not work:
     Options:
       --config FILE                   Ini format config file  [env var: CONFIG;
                                       default: /home/sean/.config/rgca/config.ini]
-      -G, --config-group, --type TEXT
+      -G, --config-group, --group TEXT
                                       Additional group to pull settings from.  If
                                       set, named group in the config file will be
                                       loaded in addition to 'DEFAULT'.  [env var:
