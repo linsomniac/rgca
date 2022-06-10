@@ -215,3 +215,7 @@ What does not work:
       --cert-type [server]            Type of certificate to generate.  [env var:
                                       CERT_TYPE; default: server]
       --help                          Show this message and exit.
+
+## License
+
+CC0 1.0 Universal, see LICENSE file for more information.
