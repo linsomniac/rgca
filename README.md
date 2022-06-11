@@ -103,10 +103,10 @@ Some example commands to create certificates:
       It is compatible with OpenSSL commands (including managing the "serial" and
       "index.txt" files).
 
-      A config file may be specified in "INI" format.  There is a "DEFAULT" group
-      that is always read, and other sections may be selected using the "--config-
-      group" option, so that multiple configurations may be easliy switched
-      between.
+      One or more config files may be specified in "INI" format.  Earlier config
+      files override values set in later files. There is a "DEFAULT" group that is
+      always read, and other sections may be selected using the "--config-group"
+      option, so that multiple configurations may be easliy switched between.
 
       Values may also be set using the environment.  Options that can be set from
       the environment are listed in the help related to those options.
@@ -128,7 +128,8 @@ Some example commands to create certificates:
 
     Options:
       --config FILE                   Ini format config file  [env var: CONFIG;
-                                      default: /home/sean/.config/rgca/config.ini]
+                                      default: .rgca.ini,
+                                      /home/sean/.config/rgca/config.ini]
       -G, --config-group, --group TEXT
                                       Additional group to pull settings from.  If
                                       set, named group in the config file will be
@@ -144,7 +145,69 @@ Some example commands to create certificates:
     Commands:
       ca
       cert
-      showkey  Show key HELP
+      showkey  Display information about the key in a keyfile.
+
+## rgca ca new --help
+
+    Usage: rgca ca new [OPTIONS] COMMON_NAME CA_KEY_FILE CA_CERT_FILE
+
+    Arguments:
+      COMMON_NAME   Main name on certificate  [env var: SUBJECT_CN;required]
+      CA_KEY_FILE   File name to write private key to.  [env var:
+                    CA_KEY_FILE;required]
+      CA_CERT_FILE  File name to write CA certificate to.  [env var:
+                    CA_CERT_FILE;required]
+
+    Options:
+      -b, --ca-key-bits, --bits INTEGER
+                                      Size of generated key, in bits.  [env var:
+                                      CA_KEY_BITS; default: 8192]
+      -c, --cipher [des3|aes128|aes192|aes256]
+                                      Cipher to use to encrypt CA key.  [env var:
+                                      CA_CIPHER; default: Cipher.aes256]
+      --passphrase TEXT               Passphrase for CA key  [env var:
+                                      CA_PASSPHRASE]
+      -P, --prompt-for-passphrase     Prompt for a passphrase, overriding the
+                                      config or environment settings.
+      -N, --no-passphrase             Do not put a passphrase on the key file.
+      --overwrite / --no-overwrite    Overwrite the key file if it already exists.
+                                      [default: no-overwrite]
+      -d, --valid-days INTEGER        Number of days the certificate is valid for.
+                                      [env var: VALID_DAYS; default: 365]
+      -D, --digest [sha256|sha512]    Message digest to use when signing the key.
+                                      [env var: DIGEST; default: sha512]
+      -a, --append-domain TEXT        If provided, this value is appended to all
+                                      domain names (CN, SAN) so short names can be
+                                      used.  For example this creates
+                                      ca.example.com rgca ca new --append-domain
+                                      .example.com ca ca.crt ca.key  [env var:
+                                      APPEND_DOMAIN]
+      -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT_C;
+                                      required]
+      -ST, --state-name, --ST TEXT    Subject: State name  [env var: SUBJECT_ST;
+                                      required]
+      -L, --locality-name, --L TEXT   Subject: Locality(city) name  [env var:
+                                      SUBJECT_L; required]
+      -O, --organization-name, --O TEXT
+                                      Subject: Organization name  [env var:
+                                      SUBJECT_O; required]
+      -OU, --organization-unit-name, --OU TEXT
+                                      Subject: Organization unit name  [env var:
+                                      SUBJECT_OU]
+      -E, --email-address, --E TEXT   Subject: Email address  [env var:
+                                      SUBJECT_EMAIL; required]
+      --run-pre / --no-run-pre        Use '--pre-command' before certificate
+                                      generation.  [env var: RUN_PRE; default: no-
+                                      run-pre]
+      --pre-command TEXT              Command to run to before starting
+                                      certificate generation.  [env var:
+                                      PRE_COMMAND]
+      --run-post / --no-run-post      Use '--post-command' to post-process
+                                      key/cert after generation.  [env var:
+                                      RUN_POST; default: no-run-post]
+      --post-command TEXT             Command to run to post-process cert/key
+                                      after generation.  [env var: POST_COMMAND]
+      --help                          Show this message and exit.
 
 ## rgca cert new --help
 
@@ -204,7 +267,7 @@ Some example commands to create certificates:
                                       used.  For example this creates a
                                       web.example.com cert without having to
                                       repeat '.example.com' all over: rgca cert
-                                      new --append-domain example.com --san test
+                                      new --append-domain .example.com --san test
                                       --san foo web web.crt web.key  [env var:
                                       APPEND_DOMAIN]
       -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT_C;
