@@ -13,6 +13,14 @@ easier to manage.
 - Everything can be controlled by command line arguments.  (`rgca cert new
   --valid-days 365 --bits 1024 --OU WidgetUnit`, see "rgca cert new --help" below).
 
+## Requirements
+
+- Python 3 (possibly 3.6 or newer)
+- Python typer library
+- pyopenssl
+
+For example on Ubuntu: `sudo apt install python3 python3-pip python3-pyopenssl; pip3 install typer`
+
 ## Status
 
 What works:
