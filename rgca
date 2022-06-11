@@ -116,32 +116,56 @@ def callback(
                     os.environ[envname] = v
 
 
-def get_passphrase(
+def get_cert_encrypt_args(
     passphrase: Union[str, None],
     no_passphrase: bool,
     prompt_for_passphrase: bool,
+    cipher: Union[Cipher, None],
     key_type: str,
     confirm: bool = False,
-) -> Union[bytes, None]:
-    """@@@"""
-    retval = passphrase
+    ) -> dict:
+    """Given CLI arguments, create the arguments to pass to the cert dump function for encryption.
+
+    Args:
+        passphrase:             Argument from CLI.
+        no_passphrase:          Argument from CLI.
+        prompt_for_passphrase:  Argument from CLI.
+        cipher:                 Argument from CLI, if None, no "cipher" is in returned dict.
+        key_type:               Description of key to use when prompting.
+        confirm:                Whether to ask the user to verify the passphrase.
+
+    Returns:
+        Arguments to pass to the cert dump function for encryption settings."""
+    dump_cert_args = { "passphrase": passphrase}
+    if cipher:
+        dump_cert_args["cipher"] = cipher
 
     if no_passphrase:
-        return None
+        return {}
     if prompt_for_passphrase or passphrase is None:
-        retval = click.prompt(
+        dump_cert_args['passphrase'] = click.prompt(
             f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm
         )
-    if type(retval) is str:
-        return retval.encode("ascii")
+    if type(dump_cert_args['passphrase']) is str:
+        dump_cert_args['passphrase'] = dump_cert_args['passphrase'].encode("ascii")
+    if not dump_cert_args['passphrase']:
+        return {}
 
-    return retval
+    return dump_cert_args
 
 
-@ca_app.command(name="newkey")
+@ca_app.command(name="new")
 def ca_newkey(
+    common_name: str = typer.Argument(
+        ..., envvar="SUBJECT_CN", help="Main name on certificate"
+    ),
     ca_key_file: str = typer.Argument(
         ..., envvar="CA_KEY_FILE", help="File name to write private key to."
+    ),
+    ca_cert_file: str = typer.Argument(
+        ...,
+        envvar="CA_CERT_FILE",
+        help="File name to write CA certificate to."
     ),
     bits: int = typer.Option(
         8192,
@@ -151,7 +175,7 @@ def ca_newkey(
         envvar="CA_KEY_BITS",
         help="Size of generated key, in bits.",
     ),
-    cipher: Optional[Cipher] = typer.Option(
+    cipher: Cipher = typer.Option(
         Cipher.aes256,
         "--cipher",
         "-c",
@@ -171,37 +195,169 @@ def ca_newkey(
     ),
     no_passphrase: bool = typer.Option(
         False,
+        "--no-passphrase",
         "-N",
         help="Do not put a passphrase on the key file.",
     ),
     overwrite: bool = typer.Option(
         False, help="Overwrite the key file if it already exists."
     ),
+    valid_days: int = typer.Option(
+        365,
+        "--valid-days",
+        "-d",
+        envvar="VALID_DAYS",
+        help="Number of days the certificate is valid for.",
+    ),
+    digest: MessageDigest = typer.Option(
+        "sha512",
+        "--digest",
+        "-D",
+        envvar="DIGEST",
+        help="Message digest to use when signing the key.",
+    ),
+    append_domain: Optional[str] = typer.Option(
+        None,
+        "--append-domain",
+        "-a",
+        envvar="APPEND_DOMAIN",
+        help="If provided, this value is appended to all domain names (CN, SAN) so "
+        "short names can be used.  For example this creates ca.example.com "
+        "rgca ca new --append-domain .example.com ca ca.crt ca.key",
+    ),
+    country_name: str = typer.Option(
+        ...,
+        "--country-name",
+        "--C",
+        "-C",
+        envvar="SUBJECT_C",
+        help="Subject: Country name",
+    ),
+    state_name: str = typer.Option(
+        ...,
+        "--state-name",
+        "--ST",
+        "-ST",
+        envvar="SUBJECT_ST",
+        help="Subject: State name",
+    ),
+    locality_name: str = typer.Option(
+        ...,
+        "--locality-name",
+        "--L",
+        "-L",
+        envvar="SUBJECT_L",
+        help="Subject: Locality(city) name",
+    ),
+    organization_name: str = typer.Option(
+        ...,
+        "--organization-name",
+        "--O",
+        "-O",
+        envvar="SUBJECT_O",
+        help="Subject: Organization name",
+    ),
+    organization_unit_name: Optional[str] = typer.Option(
+        None,
+        "--organization-unit-name",
+        "--OU",
+        "-OU",
+        envvar="SUBJECT_OU",
+        help="Subject: Organization unit name",
+    ),
+    email_address: str = typer.Option(
+        ...,
+        "--email-address",
+        "--E",
+        "-E",
+        envvar="SUBJECT_EMAIL",
+        help="Subject: Email address",
+    ),
+    run_pre: bool = typer.Option(
+        False,
+        envvar="RUN_PRE",
+        help="Use '--pre-command' before certificate generation.",
+    ),
+    pre_command: str = typer.Option(
+        None,
+        "--pre-command",
+        envvar="PRE_COMMAND",
+        help="Command to run to before starting certificate generation.",
+    ),
+    run_post: bool = typer.Option(
+        False,
+        envvar="RUN_POST",
+        help="Use '--post-command' to post-process key/cert after generation.",
+    ),
+    post_command: str = typer.Option(
+        None,
+        "--post-command",
+        envvar="POST_COMMAND",
+        help="Command to run to post-process cert/key after generation.",
+    ),
 ):
-    """GenCA HELP"""
-    if not overwrite and os.path.exists(ca_key_file):
+    """"""
+    if not overwrite and (os.path.exists(ca_key_file) or os.path.exists(ca_cert_file)):
         typer.echo(
-            'Key file already exists, will not overwrite without "--overwrite" option.'
+            'Key or Cert file already exists, will not overwrite without "--overwrite" option.'
         )
         raise typer.Exit(code=1)
 
-    final_passphrase = get_passphrase(
-        passphrase, no_passphrase, prompt_for_passphrase, "CA", confirm=True
+    if append_domain:
+        common_name = common_name + append_domain
+    os.environ["SUBJECT_CN"] = common_name
+    ca_cert_file = Template(ca_cert_file).render(os.environ)
+    ca_key_file = Template(ca_key_file).render(os.environ)
+    os.environ["CA_CERT_FILE"] = ca_cert_file
+    os.environ["CA_KEY_FILE"] = ca_key_file
+    os.environ["FILES"] = ca_key_file + " " + ca_cert_file
+
+    check_pre_post_args(run_pre, pre_command, run_post, post_command)
+    run_pre_script(run_pre, pre_command, {"COMMAND": "CA_NEW", "STAGE": "PRE"})
+
+    dump_cert_args = get_cert_encrypt_args(
+        passphrase, no_passphrase, prompt_for_passphrase, cipher, "CA", confirm=True
     )
 
-    if no_passphrase:
-        cipher = None
+    ca_cert = crypto.X509()
+    ca_cert.set_version(2)
+    ca_cert.get_subject().C = country_name
+    ca_cert.get_subject().ST = state_name
+    ca_cert.get_subject().L = locality_name
+    ca_cert.get_subject().O = organization_name  # NOQA: E741
+    if organization_unit_name:
+        ca_cert.get_subject().OU = organization_unit_name
+    ca_cert.get_subject().CN = common_name
+    ca_cert.get_subject().emailAddress = email_address
+    ca_cert.set_issuer(ca_cert.get_subject())
+
+    ca_cert.add_extensions([
+        crypto.X509Extension(b"basicConstraints", False, b"CA:TRUE"),
+        ])
+
+    serial_number = int.from_bytes(os.urandom(16), 'big')
+    ca_cert.set_serial_number(serial_number)
+    ca_cert.gmtime_adj_notBefore(0)
+    ca_cert.gmtime_adj_notAfter(valid_days * 86500)
+
 
     print("Generating key, this may take a moment...")
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bits)
+    ca_cert.set_pubkey(key)
+    ca_cert.sign(key, digest)
 
+    with open(ca_cert_file, "wt") as f:
+        f.write(crypto.dump_certificate(crypto.FILETYPE_TEXT, ca_cert).decode("ascii"))
+        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, ca_cert).decode("ascii"))
     with open(ca_key_file, "wt") as f:
         f.write(
-            crypto.dump_privatekey(
-                crypto.FILETYPE_PEM, key, cipher=cipher, passphrase=final_passphrase
-            ).decode("ascii")
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **dump_cert_args).decode(
+                "ascii"
+            )
         )
+
+    run_post_script(run_post, post_command, {"COMMAND": "CA_NEW", "STAGE": "POST"})
 
 
 @main_app.command(name="showkey")
@@ -224,21 +380,20 @@ def main_showkey(
     ),
     no_passphrase: bool = typer.Option(
         False,
+        "--no-passphrase",
         "-N",
         help="Do not put a passphrase on the key file.",
     ),
 ):
-    """Show key HELP"""
+    """Display information about the key in a keyfile."""
 
-    final_passphrase = get_passphrase(
-        passphrase, no_passphrase, prompt_for_passphrase, "Keyfile"
+    dump_cert_args = get_cert_encrypt_args(
+        passphrase, no_passphrase, prompt_for_passphrase, None, "Keyfile", confirm=False
     )
 
     with open(key_file, "rt") as f:
         try:
-            key = crypto.load_privatekey(
-                crypto.FILETYPE_PEM, f.read(), passphrase=final_passphrase
-            )
+            key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), **dump_cert_args)
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
             typer.echo(f"Failed to load key: {error}")
@@ -437,7 +592,7 @@ def cert_new(
         help="If provided, this value is appended to all domain names (CN, SAN) so "
         "short names can be used.  For example this creates a web.example.com "
         "cert without having to repeat '.example.com' all over: rgca cert new "
-        "--append-domain example.com --san test --san foo web web.crt web.key",
+        "--append-domain .example.com --san test --san foo web web.crt web.key",
     ),
     country_name: str = typer.Option(
         ...,
@@ -487,7 +642,7 @@ def cert_new(
         envvar="SUBJECT_EMAIL",
         help="Subject: Email address",
     ),
-    cipher: Optional[Cipher] = typer.Option(
+    cipher: Cipher = typer.Option(
         Cipher.aes256,
         "--cipher",
         "-c",
@@ -589,17 +744,17 @@ def cert_new(
 
     KEY_FILE: The key file.
     """
-
+    if append_domain:
+        common_name = common_name + append_domain
     os.environ["SUBJECT_CN"] = common_name
+    cert_file = Template(cert_file).render(os.environ)
+    key_file = Template(key_file).render(os.environ)
     os.environ["CERT_FILE"] = cert_file
     os.environ["KEY_FILE"] = key_file
     os.environ["FILES"] = key_file + " " + cert_file
 
     check_pre_post_args(run_pre, pre_command, run_post, post_command)
     run_pre_script(run_pre, pre_command, {"COMMAND": "CERT_NEW", "STAGE": "PRE"})
-
-    cert_file = Template(cert_file).render(os.environ)
-    key_file = Template(key_file).render(os.environ)
 
     ca_cert = None
     if ca_cert_file:
@@ -620,9 +775,6 @@ def cert_new(
         cert.get_subject().OU = organization_unit_name
     cert.get_subject().CN = common_name
     cert.get_subject().emailAddress = email_address
-
-    if append_domain:
-        common_name = common_name + append_domain
 
     san_list = [f"DNS:{common_name}".encode("ascii")]
 
@@ -670,15 +822,9 @@ def cert_new(
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
-    final_passphrase = get_passphrase(
-        passphrase, no_passphrase, prompt_for_passphrase, "Cert", confirm=True
+    dump_cert_args = get_cert_encrypt_args(
+        passphrase, no_passphrase, prompt_for_passphrase, cipher, "Cert", confirm=True
     )
-
-    dump_cert_args = {"cipher": cipher, "passphrase": final_passphrase}
-    if no_passphrase or not final_passphrase:
-        cipher = None
-        del dump_cert_args["cipher"]
-        del dump_cert_args["passphrase"]
 
     # create a key pair
     print("Generating key, this may take a moment...")

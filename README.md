@@ -21,10 +21,10 @@ What works:
   - "cert new" is compatible with openssl CLI generated CAs (cert, key, index, serial).
   - The CLI arguments and config files.
   - Multiple Subject Alternative Names.
+  - CA creation
 
 What does not work:
 
-  - CA creation (key is generated, cert is not.
   - Client or other types of certs.
   - Features for signing CSR, creating CSRs, generating new certs off existing ones,
     CRL management.
@@ -59,6 +59,8 @@ Given a config file that looks like:
 
 Some example commands to create certificates:
 
+    #  Create a new CA
+    rgca ca new example.com
     #  Create a dev cert for dev1.example.com
     rgca --config-group dev cert new dev1.example.com
     #  Create a dev cert with a san
