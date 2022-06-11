@@ -64,7 +64,7 @@ Some example commands to create certificates:
     #  Create a dev cert with a san
     rgca --config-group dev cert new --san devtest.example.com dev2.example.com
     #  Create a dev cert with several sans, using "append domain" to reduce duplication
-    rgca --config-group dev cert new --append-domain example.com --san foo --san bar dev3
+    rgca --config-group dev cert new --append-domain .example.com --san foo --san bar dev3
     #  Create a server cert (using the "server" group in the config file)
     rgca --config-group server cert new --san example.com www.example.com
 

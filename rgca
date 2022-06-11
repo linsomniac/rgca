@@ -39,7 +39,7 @@ class Cipher(str, Enum):
 def callback(
     ctx: typer.Context,
     config: Optional[List[Path]] = typer.Option(
-        [os.path.expanduser("~/.config/rgca/config.ini"), ".rgca.ini"],
+        [".rgca.ini", os.path.expanduser("~/.config/rgca/config.ini")],
         envvar="CONFIG",
         help="Ini format config file",
         dir_okay=False,
@@ -75,9 +75,10 @@ def callback(
 
     It is compatible with OpenSSL commands (including managing the "serial" and "index.txt" files).
 
-    A config file may be specified in "INI" format.  There is a "DEFAULT" group that is always read,
-    and other sections may be selected using the "--config-group" option, so that multiple
-    configurations may be easliy switched between.
+    One or more config files may be specified in "INI" format.  Earlier config files override
+    values set in later files. There is a "DEFAULT" group that is always read, and other sections
+    may be selected using the "--config-group" option, so that multiple configurations may be
+    easliy switched between.
 
     Values may also be set using the environment.  Options that can be set from the environment are
     listed in the help related to those options.
@@ -595,7 +596,7 @@ def cert_new(
     os.environ["FILES"] = key_file + " " + cert_file
 
     check_pre_post_args(run_pre, pre_command, run_post, post_command)
-    run_pre_script(run_pre, pre_command, {"SCRIPT_TYPE": "CERT_NEW"})
+    run_pre_script(run_pre, pre_command, {"COMMAND": "CERT_NEW", "STAGE": "PRE"})
 
     cert_file = Template(cert_file).render(os.environ)
     key_file = Template(key_file).render(os.environ)
@@ -697,7 +698,7 @@ def cert_new(
             )
         )
 
-    run_post_script(run_post, post_command, {"SCRIPT_TYPE": "CERT_NEW"})
+    run_post_script(run_post, post_command, {"COMMAND": "CERT_NEW", "STAGE": "POST"})
 
 
 if __name__ == "__main__":
