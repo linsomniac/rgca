@@ -123,7 +123,7 @@ def get_cert_encrypt_args(
     cipher: Union[Cipher, None],
     key_type: str,
     confirm: bool = False,
-    ) -> dict:
+) -> dict:
     """Given CLI arguments, create the arguments to pass to the cert dump function for encryption.
 
     Args:
@@ -136,19 +136,19 @@ def get_cert_encrypt_args(
 
     Returns:
         Arguments to pass to the cert dump function for encryption settings."""
-    dump_cert_args = { "passphrase": passphrase}
+    dump_cert_args = {"passphrase": passphrase}
     if cipher:
         dump_cert_args["cipher"] = cipher
 
     if no_passphrase:
         return {}
     if prompt_for_passphrase or passphrase is None:
-        dump_cert_args['passphrase'] = click.prompt(
+        dump_cert_args["passphrase"] = click.prompt(
             f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm
         )
-    if type(dump_cert_args['passphrase']) is str:
-        dump_cert_args['passphrase'] = dump_cert_args['passphrase'].encode("ascii")
-    if not dump_cert_args['passphrase']:
+    if type(dump_cert_args["passphrase"]) is str:
+        dump_cert_args["passphrase"] = dump_cert_args["passphrase"].encode("ascii")
+    if not dump_cert_args["passphrase"]:
         return {}
 
     return dump_cert_args
@@ -163,9 +163,7 @@ def ca_newkey(
         ..., envvar="CA_KEY_FILE", help="File name to write private key to."
     ),
     ca_cert_file: str = typer.Argument(
-        ...,
-        envvar="CA_CERT_FILE",
-        help="File name to write CA certificate to."
+        ..., envvar="CA_CERT_FILE", help="File name to write CA certificate to."
     ),
     bits: int = typer.Option(
         8192,
@@ -331,15 +329,16 @@ def ca_newkey(
     ca_cert.get_subject().emailAddress = email_address
     ca_cert.set_issuer(ca_cert.get_subject())
 
-    ca_cert.add_extensions([
-        crypto.X509Extension(b"basicConstraints", False, b"CA:TRUE"),
-        ])
+    ca_cert.add_extensions(
+        [
+            crypto.X509Extension(b"basicConstraints", False, b"CA:TRUE"),
+        ]
+    )
 
-    serial_number = int.from_bytes(os.urandom(16), 'big')
+    serial_number = int.from_bytes(os.urandom(16), "big")
     ca_cert.set_serial_number(serial_number)
     ca_cert.gmtime_adj_notBefore(0)
     ca_cert.gmtime_adj_notAfter(valid_days * 86500)
-
 
     print("Generating key, this may take a moment...")
     key = crypto.PKey()
