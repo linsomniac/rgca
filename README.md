@@ -67,6 +67,8 @@ Given a config file that looks like:
 
 Some example commands to create certificates:
 
+    #  Show information about a cert
+    rgca cert show cacert.pem
     #  Create a new CA
     rgca ca new example.com
     #  Create a dev cert for dev1.example.com
@@ -146,6 +148,19 @@ Some example commands to create certificates:
       ca
       cert
       showkey  Display information about the key in a keyfile.
+
+## rgca cert show --help
+
+    Usage: rgca cert show [OPTIONS] CERT_FILE
+
+      Display information about a certificate.
+
+    Arguments:
+      CERT_FILE  Certificate file to show information about.  [env var:
+                 CERT_FILE;required]
+
+    Options:
+      --help  Show this message and exit.
 
 ## rgca ca new --help
 

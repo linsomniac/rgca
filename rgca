@@ -871,5 +871,17 @@ def cert_new(
     run_post_script(run_post, post_command, {"COMMAND": "CERT_NEW", "STAGE": "POST"})
 
 
+@cert_app.command(name="show")
+def cert_show(
+    cert_file: typer.FileText = typer.Argument(
+        ..., envvar="CERT_FILE", help="Certificate file to show information about."
+    ),
+):
+    """Display information about a certificate."""
+
+    cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read().encode("ascii"))
+    print(crypto.dump_certificate(crypto.FILETYPE_TEXT, cert).decode("ascii"))
+
+
 if __name__ == "__main__":
     main_app()
