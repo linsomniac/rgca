@@ -5,6 +5,7 @@ easier to manage.
 
 # Features
 
+- Quick "show cert info": "rgca cert show FILE" (as opposed to "openssl x509 -in FILE -noout -text").
 - Rich command-line and config file to control cert generation.
 - Pre/post scripts to manage certs (say, deploying them to a server, committing
   serial/index to git)
