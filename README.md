@@ -207,6 +207,10 @@ Some example commands to create certificates:
                                       RUN_POST; default: no-run-post]
       --post-command TEXT             Command to run to post-process cert/key
                                       after generation.  [env var: POST_COMMAND]
+      --random-serial-bits [32|64|128]
+                                      Number of bits for the random serial number
+                                      generation.  [env var: RANDOM_SERIAL_BITS;
+                                      default: 128]
       --help                          Show this message and exit.
 
 ## rgca cert new --help
@@ -251,6 +255,14 @@ Some example commands to create certificates:
       --serial-file PATH              File that has the next serial number in it.
                                       If undefined or a non-existant file, serial
                                       0 is used.  [env var: SERIAL_FILE]
+      --random-serial / --no-random-serial
+                                      Use a randomly generated serial number
+                                      rather than the --serial-file.  [env var:
+                                      RANDOM_SERIAL; default: random-serial]
+      --random-serial-bits [32|64|128]
+                                      Number of bits for the random serial number
+                                      generation.  [env var: RANDOM_SERIAL_BITS;
+                                      default: 128]
       --index-file PATH               File to write the certificate information to
                                       (ca database).  [env var: INDEX_FILE]
       -d, --valid-days INTEGER        Number of days the certificate is valid for.

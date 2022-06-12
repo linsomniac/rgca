@@ -19,6 +19,12 @@ main_app.add_typer(ca_app, name="ca")
 main_app.add_typer(cert_app, name="cert")
 
 
+class SerialBits(str, Enum):
+    bits32 = "32"
+    bits64 = "64"
+    bits128 = "128"
+
+
 class MessageDigest(str, Enum):
     sha256 = "sha256"
     sha512 = "sha512"
@@ -155,7 +161,7 @@ def get_cert_encrypt_args(
 
 
 @ca_app.command(name="new")
-def ca_newkey(
+def ca_new(
     common_name: str = typer.Argument(
         ..., envvar="SUBJECT_CN", help="Main name on certificate"
     ),
@@ -293,6 +299,11 @@ def ca_newkey(
         envvar="POST_COMMAND",
         help="Command to run to post-process cert/key after generation.",
     ),
+    random_serial_bits: SerialBits = typer.Option(
+        "128",
+        envvar="RANDOM_SERIAL_BITS",
+        help="Number of bits for the random serial number generation.",
+    ),
 ):
     """"""
     if not overwrite and (os.path.exists(ca_key_file) or os.path.exists(ca_cert_file)):
@@ -335,7 +346,7 @@ def ca_newkey(
         ]
     )
 
-    serial_number = int.from_bytes(os.urandom(16), "big")
+    serial_number = int.from_bytes(os.urandom(int(random_serial_bits) // 8), "big")
     ca_cert.set_serial_number(serial_number)
     ca_cert.gmtime_adj_notBefore(0)
     ca_cert.gmtime_adj_notAfter(valid_days * 86500)
@@ -549,6 +560,16 @@ def cert_new(
         envvar="SERIAL_FILE",
         help="File that has the next serial number in it.  "
         "If undefined or a non-existant file, serial 0 is used.",
+    ),
+    random_serial: bool = typer.Option(
+        True,
+        envvar="RANDOM_SERIAL",
+        help="Use a randomly generated serial number rather than the --serial-file.",
+    ),
+    random_serial_bits: SerialBits = typer.Option(
+        "128",
+        envvar="RANDOM_SERIAL_BITS",
+        help="Number of bits for the random serial number generation.",
     ),
     index_file: Path = typer.Option(
         None,
@@ -806,7 +827,11 @@ def cert_new(
 
     cert.add_extensions(certExtensions)
 
-    serial_number = get_next_serial(serial_file)
+    if random_serial:
+        serial_number = int.from_bytes(os.urandom(int(random_serial_bits) // 8), "big")
+    else:
+        serial_number = get_next_serial(serial_file)
+
     cert.set_serial_number(serial_number)
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(valid_days * 86500)
