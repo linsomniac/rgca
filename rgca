@@ -122,6 +122,14 @@ def callback(
                     os.environ[envname] = v
 
 
+def index_serial_number(serial_number: int) -> str:
+    '''Format the serial number for the index file.'''
+    s = format(serial_number, 'X')
+    if len(s) % 2 == 1:
+        s = '0' + s
+    return s
+
+
 def get_cert_encrypt_args(
     passphrase: Union[str, None],
     no_passphrase: bool,
@@ -300,7 +308,7 @@ def ca_new(
         help="Command to run to post-process cert/key after generation.",
     ),
     random_serial_bits: SerialBits = typer.Option(
-        "128",
+        "64",
         envvar="RANDOM_SERIAL_BITS",
         help="Number of bits for the random serial number generation.",
     ),
@@ -841,7 +849,7 @@ def cert_new(
     if index_file:
         cert_not_after = cert.get_notAfter().decode("ascii")[2:]
         cert_dn = str(cert.get_subject()).split("'")[1]
-        ca_db_line = f"V\t{cert_not_after}\t\t{serial_number:X}\t{cert_file}\t{cert_dn}\n"
+        ca_db_line = f"V\t{cert_not_after}\t\t{index_serial_number(serial_number)}\t{cert_file}\t{cert_dn}\n"
 
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
