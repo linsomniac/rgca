@@ -123,10 +123,10 @@ def callback(
 
 
 def index_serial_number(serial_number: int) -> str:
-    '''Format the serial number for the index file.'''
-    s = format(serial_number, 'X')
+    """Format the serial number for the index file."""
+    s = format(serial_number, "X")
     if len(s) % 2 == 1:
-        s = '0' + s
+        s = "0" + s
     return s
 
 
