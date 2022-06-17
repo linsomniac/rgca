@@ -575,7 +575,7 @@ def cert_new(
         help="Use a randomly generated serial number rather than the --serial-file.",
     ),
     random_serial_bits: SerialBits = typer.Option(
-        "128",
+        "64",
         envvar="RANDOM_SERIAL_BITS",
         help="Number of bits for the random serial number generation.",
     ),
