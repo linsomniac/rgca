@@ -126,7 +126,7 @@ def callback(
                 envname = k.upper()
                 if envname not in os.environ:
                     os.environ[envname] = v
-                if envname.startswith('!'):
+                if envname.startswith("!"):
                     os.environ[envname[1:]] = v
 
 
@@ -561,9 +561,7 @@ def load_ca_key_args(ca_key_file: str, key_crypt_args: dict) -> crypto.PKey:
         The key that was loaded."""
     with open(ca_key_file, "rt") as f:
         try:
-            return crypto.load_privatekey(
-                crypto.FILETYPE_PEM, f.read(), **key_crypt_args
-            )
+            return crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), **key_crypt_args)
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
             typer.echo(f"Failed to load CA key: {error}")
@@ -1003,17 +1001,19 @@ def crl_new(
     ca_key = load_ca_key_args(ca_key_file, key_crypt_args)
 
     with open(ca_cert_file, "rt") as f:
-        ca_cert = crypto.load_certificate(
-            crypto.FILETYPE_PEM, f.read().encode("ascii")
-        )
+        ca_cert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read().encode("ascii"))
 
     crl = crypto.CRL()
-    crl_text = crl.export(ca_cert, ca_key, crypto.FILETYPE_TEXT, valid_days, digest.encode('ascii'))
-    crl_pem = crl.export(ca_cert, ca_key, crypto.FILETYPE_PEM, valid_days, digest.encode('ascii'))
+    crl_text = crl.export(
+        ca_cert, ca_key, crypto.FILETYPE_TEXT, valid_days, digest.encode("ascii")
+    )
+    crl_pem = crl.export(
+        ca_cert, ca_key, crypto.FILETYPE_PEM, valid_days, digest.encode("ascii")
+    )
 
-    with open(crl_file, 'wt') as f:
-        f.write(crl_text.decode('ascii'))
-        f.write(crl_pem.decode('ascii'))
+    with open(crl_file, "wt") as f:
+        f.write(crl_text.decode("ascii"))
+        f.write(crl_pem.decode("ascii"))
 
     run_post_script(run_post, post_command, {"COMMAND": "CRL_NEW", "STAGE": "POST"})
 
