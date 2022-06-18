@@ -15,8 +15,10 @@ from jinja2 import Template
 main_app = typer.Typer()
 ca_app = typer.Typer()
 cert_app = typer.Typer()
-main_app.add_typer(ca_app, name="ca")
-main_app.add_typer(cert_app, name="cert")
+crl_app = typer.Typer()
+main_app.add_typer(ca_app, name="ca", help="Certificate Authority")
+main_app.add_typer(cert_app, name="cert", help="Certificate")
+main_app.add_typer(crl_app, name="crl", help="Certificate Revocation List")
 
 
 class SerialBits(str, Enum):
@@ -86,6 +88,10 @@ def callback(
     may be selected using the "--config-group" option, so that multiple configurations may be
     easliy switched between.
 
+    Normally, config values will not override those in the environment or from earlier config
+    files or sections.  The the name starts with "!", it will override the environment or earlier
+    config files/sections.
+
     Values may also be set using the environment.  Options that can be set from the environment are
     listed in the help related to those options.
 
@@ -120,6 +126,8 @@ def callback(
                 envname = k.upper()
                 if envname not in os.environ:
                     os.environ[envname] = v
+                if envname.startswith('!'):
+                    os.environ[envname[1:]] = v
 
 
 def index_serial_number(serial_number: int) -> str:
@@ -130,7 +138,7 @@ def index_serial_number(serial_number: int) -> str:
     return s
 
 
-def get_cert_encrypt_args(
+def get_key_encrypt_args(
     passphrase: Union[str, None],
     no_passphrase: bool,
     prompt_for_passphrase: bool,
@@ -138,7 +146,7 @@ def get_cert_encrypt_args(
     key_type: str,
     confirm: bool = False,
 ) -> dict:
-    """Given CLI arguments, create the arguments to pass to the cert dump function for encryption.
+    """Given CLI arguments, create the arguments to pass to the key dump function for encryption.
 
     Args:
         passphrase:             Argument from CLI.
@@ -150,22 +158,22 @@ def get_cert_encrypt_args(
 
     Returns:
         Arguments to pass to the cert dump function for encryption settings."""
-    dump_cert_args = {"passphrase": passphrase}
+    args = {"passphrase": passphrase}
     if cipher:
-        dump_cert_args["cipher"] = cipher
+        args["cipher"] = cipher
 
     if no_passphrase:
         return {}
     if prompt_for_passphrase or passphrase is None:
-        dump_cert_args["passphrase"] = click.prompt(
+        args["passphrase"] = click.prompt(
             f"{key_type} Passphrase", hide_input=True, confirmation_prompt=confirm
         )
-    if type(dump_cert_args["passphrase"]) is str:
-        dump_cert_args["passphrase"] = dump_cert_args["passphrase"].encode("ascii")
-    if not dump_cert_args["passphrase"]:
+    if type(args["passphrase"]) is str:
+        args["passphrase"] = args["passphrase"].encode("ascii")
+    if not args["passphrase"]:
         return {}
 
-    return dump_cert_args
+    return args
 
 
 @ca_app.command(name="new")
@@ -313,7 +321,7 @@ def ca_new(
         help="Number of bits for the random serial number generation.",
     ),
 ):
-    """"""
+    """@@@"""
     if not overwrite and (os.path.exists(ca_key_file) or os.path.exists(ca_cert_file)):
         typer.echo(
             'Key or Cert file already exists, will not overwrite without "--overwrite" option.'
@@ -332,7 +340,7 @@ def ca_new(
     check_pre_post_args(run_pre, pre_command, run_post, post_command)
     run_pre_script(run_pre, pre_command, {"COMMAND": "CA_NEW", "STAGE": "PRE"})
 
-    dump_cert_args = get_cert_encrypt_args(
+    key_crypt_args = get_key_encrypt_args(
         passphrase, no_passphrase, prompt_for_passphrase, cipher, "CA", confirm=True
     )
 
@@ -370,7 +378,7 @@ def ca_new(
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, ca_cert).decode("ascii"))
     with open(ca_key_file, "wt") as f:
         f.write(
-            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **dump_cert_args).decode(
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **key_crypt_args).decode(
                 "ascii"
             )
         )
@@ -405,13 +413,13 @@ def main_showkey(
 ):
     """Display information about the key in a keyfile."""
 
-    dump_cert_args = get_cert_encrypt_args(
+    key_crypt_args = get_key_encrypt_args(
         passphrase, no_passphrase, prompt_for_passphrase, None, "Keyfile", confirm=False
     )
 
     with open(key_file, "rt") as f:
         try:
-            key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), **dump_cert_args)
+            key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), **key_crypt_args)
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
             typer.echo(f"Failed to load key: {error}")
@@ -539,6 +547,22 @@ def load_ca_key(ca_key_file: str, ca_passphrase: Union[str, None]) -> crypto.PKe
         try:
             return crypto.load_privatekey(
                 crypto.FILETYPE_PEM, f.read(), passphrase=capass
+            )
+        except crypto.Error as e:
+            error = " ".join(e.args[0][0])
+            typer.echo(f"Failed to load CA key: {error}")
+            raise typer.Exit(code=1)
+
+
+def load_ca_key_args(ca_key_file: str, key_crypt_args: dict) -> crypto.PKey:
+    """Load the CA private key, using args based on get_key_encrypt_args()
+
+    Returns:
+        The key that was loaded."""
+    with open(ca_key_file, "rt") as f:
+        try:
+            return crypto.load_privatekey(
+                crypto.FILETYPE_PEM, f.read(), **key_crypt_args
             )
         except crypto.Error as e:
             error = " ".join(e.args[0][0])
@@ -706,13 +730,6 @@ def cert_new(
         help="Prompt for a passphrase, overriding the config or environment settings.  "
         "Is overridden by --no-passphrase.",
     ),
-    passphrase: Union[str, None] = typer.Option(
-        None,
-        "--passphrase",
-        "-P",
-        envvar="PASSPHRASE",
-        help="Passphrase to encrypt the key.",
-    ),
     no_passphrase: bool = typer.Option(
         False,
         "--no-passphrase",
@@ -854,8 +871,8 @@ def cert_new(
         with index_file.open("a") as fp:
             fp.write(ca_db_line)
 
-    dump_cert_args = get_cert_encrypt_args(
-        passphrase, no_passphrase, prompt_for_passphrase, cipher, "Cert", confirm=True
+    key_crypt_args = get_key_encrypt_args(
+        ca_passphrase, no_passphrase, prompt_for_passphrase, cipher, "Cert", confirm=True
     )
 
     # create a key pair
@@ -871,7 +888,7 @@ def cert_new(
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("ascii"))
     with open(key_file, "wt") as f:
         f.write(
-            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **dump_cert_args).decode(
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, key, **key_crypt_args).decode(
                 "ascii"
             )
         )
@@ -889,6 +906,116 @@ def cert_show(
 
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read().encode("ascii"))
     print(crypto.dump_certificate(crypto.FILETYPE_TEXT, cert).decode("ascii"))
+
+
+@crl_app.command(name="new")
+def crl_new(
+    crl_file: str = typer.Argument(
+        ..., envvar="CRL_FILE", help="Certificate Revocation List file."
+    ),
+    ca_key_file: str = typer.Argument(
+        ..., envvar="CA_KEY_FILE", help="File name to write private key to."
+    ),
+    ca_cert_file: str = typer.Argument(
+        ..., envvar="CA_CERT_FILE", help="File name to write CA certificate to."
+    ),
+    passphrase: Union[str, None] = typer.Option(
+        None,
+        envvar="CA_PASSPHRASE",
+        help="Passphrase for CA key",
+    ),
+    prompt_for_passphrase: bool = typer.Option(
+        False,
+        "--prompt-for-passphrase",
+        "-P",
+        help="Prompt for a passphrase for the CA key, overriding the config or environment settings.",
+    ),
+    no_passphrase: bool = typer.Option(
+        False,
+        "--no-passphrase",
+        "-N",
+        help="Do not use a passphrase for the CA key.",
+    ),
+    valid_days: int = typer.Option(
+        100,
+        "--valid-days",
+        "-d",
+        envvar="CRL_VALID_DAYS",
+        help="Number of days the CRL is valid for.",
+    ),
+    digest: MessageDigest = typer.Option(
+        "sha512",
+        "--digest",
+        "-D",
+        envvar="DIGEST",
+        help="Message digest to use when signing the key.",
+    ),
+    overwrite: bool = typer.Option(
+        False, help="Overwrite the key file if it already exists."
+    ),
+    index_file: Path = typer.Option(
+        None,
+        envvar="INDEX_FILE",
+        help="File to write the certificate information to (ca database).",
+    ),
+    run_pre: bool = typer.Option(
+        False,
+        envvar="RUN_PRE",
+        help="Use '--pre-command' before certificate generation.",
+    ),
+    pre_command: str = typer.Option(
+        None,
+        "--pre-command",
+        envvar="PRE_COMMAND",
+        help="Command to run to before starting certificate generation.",
+    ),
+    run_post: bool = typer.Option(
+        False,
+        envvar="RUN_POST",
+        help="Use '--post-command' to post-process key/cert after generation.",
+    ),
+    post_command: str = typer.Option(
+        None,
+        "--post-command",
+        envvar="POST_COMMAND",
+        help="Command to run to post-process cert/key after generation.",
+    ),
+):
+    """Create a new Certificate Revocation List"""
+    crl_file = Template(crl_file).render(os.environ)
+    ca_key_file = Template(ca_key_file).render(os.environ)
+    ca_cert_file = Template(ca_cert_file).render(os.environ)
+    os.environ["CRL_FILE"] = crl_file
+    os.environ["FILES"] = crl_file
+
+    if not overwrite and os.path.exists(crl_file):
+        typer.echo(
+            'CRL file already exists, will not overwrite without "--overwrite" option.'
+        )
+        raise typer.Exit(code=1)
+
+    check_pre_post_args(run_pre, pre_command, run_post, post_command)
+    run_pre_script(run_pre, pre_command, {"COMMAND": "CRL_NEW", "STAGE": "PRE"})
+
+    key_crypt_args = get_key_encrypt_args(
+        passphrase, no_passphrase, prompt_for_passphrase, None, "CA", confirm=False
+    )
+    ca_key = load_ca_key_args(ca_key_file, key_crypt_args)
+
+    with open(ca_cert_file, "rt") as f:
+        ca_cert = crypto.load_certificate(
+            crypto.FILETYPE_PEM, f.read().encode("ascii")
+        )
+
+    crl = crypto.CRL()
+    crl_text = crl.export(ca_cert, ca_key, crypto.FILETYPE_TEXT, valid_days, digest.encode('ascii'))
+    crl_pem = crl.export(ca_cert, ca_key, crypto.FILETYPE_PEM, valid_days, digest.encode('ascii'))
+
+    with open(crl_file, 'wt') as f:
+        f.write(crl_text.decode('ascii'))
+        f.write(crl_pem.decode('ascii'))
+
+    run_post_script(run_post, post_command, {"COMMAND": "CRL_NEW", "STAGE": "POST"})
 
 
 if __name__ == "__main__":
