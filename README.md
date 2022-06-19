@@ -30,13 +30,14 @@ What works:
   - "cert new" is compatible with openssl CLI generated CAs (cert, key, index, serial).
   - The CLI arguments and config files.
   - Multiple Subject Alternative Names.
-  - CA creation
+  - CA creation.
+  - CRL creation, cert revoking.
 
 What does not work:
 
   - Client or other types of certs.
-  - Features for signing CSR, creating CSRs, generating new certs off existing ones,
-    CRL management.
+  - Signing CSR, creating CSRs.
+  - Generating new certs off existing ones.
 
 ## Examples
 

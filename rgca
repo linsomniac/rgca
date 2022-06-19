@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Generator
 from enum import Enum
 from OpenSSL import crypto, SSL
 from pathlib import Path
@@ -8,6 +8,8 @@ import os
 from configparser import ConfigParser
 import subprocess
 import shlex
+import datetime
+import re
 import typer
 import click
 from jinja2 import Template
@@ -36,11 +38,87 @@ class CertType(str, Enum):
     server = "server"
 
 
+class CertStatus(str, Enum):
+    valid = "V"
+    revoked = "R"
+    expired = "E"
+
+
 class Cipher(str, Enum):
     des3 = "des3"
     aes128 = "aes128"
     aes192 = "aes192"
     aes256 = "aes256"
+
+
+class RevokedReasons(str, Enum):
+    unspecified = "unspecified"
+    keyCompromise = "keyCompromise"
+    CACompromise = "CACompromise"
+    affiliationChanged = "affiliationChanged"
+    superseded = "superseded"
+    cessationOfOperation = "cessationOfOperation"
+    certificateHold = "certificateHold"
+
+
+class IndexFile:
+    def __init__(self, index_filename):
+        self.index_filename = index_filename
+        self.load()
+
+    def load(self):
+        rx = re.compile(
+            r"^(?P<status>[VRE])\s+(?P<expiration_date>\d+Z)\s+"
+            r"(?P<revocation_date>(?:\d+Z)|)\s(?P<serial_number>[\dabcdefABCDEF]+)\s+"
+            r"(?P<filename>\S+)\s+(?P<cert_dn>\S+)\s*$"
+        )
+        with open(self.index_filename, "rt") as f:
+            self.index_data = []
+            line_number = 0
+            for line in f.readlines():
+                line_number += 1
+                match = rx.match(line)
+                if not match:
+                    typer.echo(
+                        f"ERROR: Unable to parse index line {line_number} in {self.index_filename}"
+                    )
+                    continue
+                self.index_data.append(match.groupdict())
+
+    def parse_dn(self, dn: str) -> dict:
+        parsed = {}
+        for x in dn.split("/"):
+            if not x:
+                continue
+            name, value = x.split("=", 1)
+            parsed[name] = value
+        return parsed
+
+    def get_by_common_name(self, cn: str) -> Generator[dict, None, None]:
+        for row in self.index_data:
+            if self.parse_dn(row["cert_dn"]).get("CN") == cn:
+                yield row
+
+    def set_sn_status(self, sn: str, status: CertStatus) -> None:
+        sn = sn.lstrip("0")
+
+        for row in self.index_data:
+            if row["serial_number"].lstrip("0") == sn:
+                row["status"] = status
+
+    def write(self) -> None:
+        tmp_file = os.fspath(self.index_filename) + ".tmp"
+        with open(tmp_file, "wt") as f:
+            for row in self.index_data:
+                f.write(
+                    f"{row['status']}\t"
+                    f"{row['expiration_date']}\t"
+                    f"{row['revocation_date']}\t"
+                    f"{row['serial_number']}\t"
+                    f"{row['filename']}\t"
+                    f"{row['cert_dn']}\n"
+                )
+            os.rename(tmp_file, self.index_filename)
 
 
 @main_app.callback()
@@ -128,6 +206,40 @@ def callback(
                     os.environ[envname] = v
                 if envname.startswith("!"):
                     os.environ[envname[1:]] = v
+
+
+def revoke(
+    crl: crypto.CRL,
+    sn: bytes,
+    rev_date: Union[str, None],
+    reason: Union[RevokedReasons, None],
+    index: Union[IndexFile, None],
+) -> None:
+    """Add the serial number to the CRL."""
+    revoked = crypto.Revoked()
+    revoked.set_serial(sn)
+    revoked.set_rev_date(encode_rev_date(rev_date))
+    revoked.set_reason(encode_reason(reason))
+    crl.add_revoked(revoked)
+
+
+def asn1_now() -> bytes:
+    """Return the current time as an ASN.1 string"""
+    return datetime.datetime.utcnow().strftime("%Y%m%d%H%M%SZ").encode("ascii")
+
+
+def encode_rev_date(rev_date: Union[None, str]) -> bytes:
+    """Convert revocation date for passing to Revoke object."""
+    if rev_date is None:
+        return asn1_now()
+    return rev_date.encode("ascii")
+
+
+def encode_reason(reason: Union[RevokedReasons, None]) -> Union[None, bytes]:
+    """Convert RevokedReasons for passing to Revoke object."""
+    if reason is None:
+        return None
+    return reason.encode("ascii")
 
 
 def index_serial_number(serial_number: int) -> str:
@@ -321,7 +433,7 @@ def ca_new(
         help="Number of bits for the random serial number generation.",
     ),
 ):
-    """@@@"""
+    """Create a new Certificate Authority"""
     if not overwrite and (os.path.exists(ca_key_file) or os.path.exists(ca_cert_file)):
         typer.echo(
             'Key or Cert file already exists, will not overwrite without "--overwrite" option.'
@@ -1016,6 +1128,195 @@ def crl_new(
         f.write(crl_pem.decode("ascii"))
 
     run_post_script(run_post, post_command, {"COMMAND": "CRL_NEW", "STAGE": "POST"})
+
+
+@crl_app.command(name="revoke")
+def crl_revoke(
+    serial: Optional[List[str]] = typer.Option(
+        None,
+        "--serial",
+        "-s",
+        help="The serial number of a certificate to revoke.",
+    ),
+    cert_file: Optional[List[typer.FileText]] = typer.Option(
+        None,
+        "--cert-file",
+        "-f",
+        help="Certificate file to revoke.",
+    ),
+    common_name: Optional[List[str]] = typer.Option(
+        None,
+        "--common-name",
+        "-n",
+        help="Certificate file to revoke.",
+    ),
+    reason: Optional[RevokedReasons] = typer.Option(
+        None,
+        "--reason",
+        "-r",
+        help="Reason the keys are being revoked.",
+    ),
+    rev_date: Optional[str] = typer.Option(
+        None,
+        help="ASN.1 formatted revocation date (defaults to current time, format: [YYYYMMDDHHMMSS]Z).",
+    ),
+    crl_file: str = typer.Argument(
+        ..., envvar="CRL_FILE", help="Certificate Revocation List file."
+    ),
+    ca_key_file: str = typer.Argument(
+        ..., envvar="CA_KEY_FILE", help="File name to write private key to."
+    ),
+    ca_cert_file: str = typer.Argument(
+        ..., envvar="CA_CERT_FILE", help="File name to write CA certificate to."
+    ),
+    passphrase: Union[str, None] = typer.Option(
+        None,
+        envvar="CA_PASSPHRASE",
+        help="Passphrase for CA key",
+    ),
+    prompt_for_passphrase: bool = typer.Option(
+        False,
+        "--prompt-for-passphrase",
+        "-P",
+        help="Prompt for a passphrase for the CA key, overriding the config or environment settings.",
+    ),
+    no_passphrase: bool = typer.Option(
+        False,
+        "--no-passphrase",
+        "-N",
+        help="Do not use a passphrase for the CA key.",
+    ),
+    valid_days: int = typer.Option(
+        100,
+        "--valid-days",
+        "-d",
+        envvar="CRL_VALID_DAYS",
+        help="Number of days the CRL is valid for.",
+    ),
+    digest: MessageDigest = typer.Option(
+        "sha512",
+        "--digest",
+        "-D",
+        envvar="DIGEST",
+        help="Message digest to use when signing the key.",
+    ),
+    index_file: Path = typer.Option(
+        None,
+        envvar="INDEX_FILE",
+        help="File to write the certificate information to (ca database).",
+    ),
+    run_pre: bool = typer.Option(
+        False,
+        envvar="RUN_PRE",
+        help="Use '--pre-command' before certificate generation.",
+    ),
+    pre_command: str = typer.Option(
+        None,
+        "--pre-command",
+        envvar="PRE_COMMAND",
+        help="Command to run to before starting certificate generation.",
+    ),
+    run_post: bool = typer.Option(
+        False,
+        envvar="RUN_POST",
+        help="Use '--post-command' to post-process key/cert after generation.",
+    ),
+    post_command: str = typer.Option(
+        None,
+        "--post-command",
+        envvar="POST_COMMAND",
+        help="Command to run to post-process cert/key after generation.",
+    ),
+):
+    """Revoke certificates"""
+    crl_file = Template(crl_file).render(os.environ)
+    ca_key_file = Template(ca_key_file).render(os.environ)
+    ca_cert_file = Template(ca_cert_file).render(os.environ)
+    os.environ["CRL_FILE"] = crl_file
+    os.environ["FILES"] = crl_file
+
+    if common_name and not index_file:
+        typer.echo("--common-name requires --index-file")
+        raise typer.Exit(code=1)
+
+    check_pre_post_args(run_pre, pre_command, run_post, post_command)
+    run_pre_script(run_pre, pre_command, {"COMMAND": "CRL_REVOKE", "STAGE": "PRE"})
+
+    key_crypt_args = get_key_encrypt_args(
+        passphrase, no_passphrase, prompt_for_passphrase, None, "CA", confirm=False
+    )
+    ca_key = load_ca_key_args(ca_key_file, key_crypt_args)
+
+    with open(ca_cert_file, "rt") as f:
+        ca_cert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read().encode("ascii"))
+
+    with open(crl_file, "rt") as f:
+        crl = crypto.load_crl(crypto.FILETYPE_PEM, f.read().encode("ascii"))
+
+    existing_serials = list(
+        [int(x.get_serial().decode("ascii"), 16) for x in crl.get_revoked()]
+    )
+    updates = 0
+
+    index = None
+    if index_file:
+        index = IndexFile(index_file)
+
+    if serial:
+        for sn in serial:
+            if index:
+                index.set_sn_status(sn.encode("ascii"), CertStatus.revoked)
+            if int(sn, 16) in existing_serials:
+                typer.echo(f"Serial '{sn}' already in CRL, skipping...")
+                continue
+            revoke(crl, sn.encode("ascii"), rev_date, reason, index)
+            updates += 1
+
+    if cert_file:
+        for x in cert_file:
+            cert = crypto.load_certificate(crypto.FILETYPE_PEM, x.read().encode("ascii"))
+            sn = cert.get_serial_number()
+
+            if index:
+                index.set_sn_status(f"{sn:X}", CertStatus.revoked)
+            if sn in existing_serials:
+                typer.echo(f"Serial '{sn}' ({x.name}) already in CRL, skipping...")
+                continue
+            revoke(crl, f"{sn:X}".encode("ascii"), rev_date, reason, index)
+            updates += 1
+
+    if common_name:
+        for cn in common_name:
+            for cert_info in index.get_by_common_name(cn):
+                sn = int(cert_info["serial_number"], 16)
+                if index:
+                    index.set_sn_status(f"{sn:X}", CertStatus.revoked)
+                if sn in existing_serials:
+                    typer.echo(f"Serial '{sn}' already in CRL, skipping...")
+                    continue
+                revoke(crl, f"{sn:X}".encode("ascii"), rev_date, reason, index)
+                updates += 1
+
+    if index:
+        index.write()
+
+    if updates == 0:
+        typer.echo("No updates were done to CRL, skipping update.")
+        raise typer.Exit(0)
+
+    crl_text = crl.export(
+        ca_cert, ca_key, crypto.FILETYPE_TEXT, valid_days, digest.encode("ascii")
+    )
+    crl_pem = crl.export(
+        ca_cert, ca_key, crypto.FILETYPE_PEM, valid_days, digest.encode("ascii")
+    )
+
+    with open(crl_file + ".tmp", "wt") as f:
+        f.write(crl_text.decode("ascii"))
+        f.write(crl_pem.decode("ascii"))
+    os.rename(crl_file + ".tmp", crl_file)
+
+    run_post_script(run_post, post_command, {"COMMAND": "CRL_REVOKE", "STAGE": "POST"})
 
 
 if __name__ == "__main__":
