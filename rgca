@@ -200,7 +200,11 @@ def callback(
             ini = ConfigParser()
             ini.read_string(config_file.read_text())
 
-            for k, v in ini[config_group].items():
+            section = 'DEFAULT'
+            if config_group in ini:
+                section = config_group
+
+            for k, v in ini[section].items():
                 envname = k.upper()
                 if envname not in os.environ:
                     os.environ[envname] = v
