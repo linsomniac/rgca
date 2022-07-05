@@ -200,7 +200,7 @@ def callback(
             ini = ConfigParser()
             ini.read_string(config_file.read_text())
 
-            section = 'DEFAULT'
+            section = "DEFAULT"
             if config_group in ini:
                 section = config_group
 
