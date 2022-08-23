@@ -734,7 +734,8 @@ def cert_new(
         "--san",
         "-s",
         help="Subject alternative name to add to the certificate.  The Common Name is "
-        "listed as the first SAN.",
+        """listed as the first SAN.  If no prefix is given, "DNS:" is prepended, valid """
+        """prefixes are "IP:" and "DNS:".""",
     ),
     bits: int = typer.Option(
         8192,
@@ -941,7 +942,7 @@ def cert_new(
         for san in subject_alternative_names:
             if append_domain:
                 san = san + append_domain
-            if not san.startswith("DNS:"):
+            if not san.split(":")[0].upper() in ["DNS", "IP"]:
                 san = "DNS:" + san
             san_list.append(san.encode("ascii"))
 
