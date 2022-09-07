@@ -36,6 +36,14 @@ class MessageDigest(str, Enum):
 
 class CertType(str, Enum):
     server = "server"
+    client = "client"
+    #  TODO: Not yet supported
+    # email = "email"
+    # objsign = "objsign"
+    # reserved = "reserved"
+    # sslca = "sslCA"
+    # emailca = "emailCA"
+    # objca = "objCA"
 
 
 class CertStatus(str, Enum):
@@ -684,6 +692,59 @@ def load_ca_key_args(ca_key_file: str, key_crypt_args: dict) -> crypto.PKey:
             raise typer.Exit(code=1)
 
 
+def extensionsFromCertType(cert_type: List[CertType]) -> List[crypto.X509Extension]:
+    """Return a list of extensions based on the cert_type.
+
+    Args:
+        cert_type: The certificate type(s) of this cert
+
+    Returns:
+        Extensions represented by the certType
+    """
+    certExtensions = []
+
+    keyUsage = set()
+    certType = set()
+    if "server" in cert_type:
+        keyUsage.update({b"Digital Signature"})
+        keyUsage.update({b"Non Repudiation"})
+        keyUsage.update({b"Key Encipherment"})
+        # @@@ keyUsage.update({b"serverAuth"})
+        certType.update({b"server"})
+    if "client" in cert_type:
+        keyUsage.update({b"Digital Signature"})
+        keyUsage.update({b"Non Repudiation"})
+        keyUsage.update({b"Key Encipherment"})
+        # @@@ keyUsage.update({b"clientAuth"})
+        certType.update({b"client"})
+    if "email" in cert_type:
+        typer.echo("Unsupported certificate type: email")
+        raise typer.Exit(code=1)
+    if "objsign" in cert_type:
+        typer.echo("Unsupported certificate type: objsign")
+        raise typer.Exit(code=1)
+    if "reserved" in cert_type:
+        typer.echo("Unsupported certificate type: reserved")
+        raise typer.Exit(code=1)
+    if "sslCA" in cert_type:
+        typer.echo("Unsupported certificate type: sslCA")
+        raise typer.Exit(code=1)
+    if "emailCA" in cert_type:
+        typer.echo("Unsupported certificate type: emailCA")
+        raise typer.Exit(code=1)
+    if "objCA" in cert_type:
+        typer.echo("Unsupported certificate type: objCA")
+        raise typer.Exit(code=1)
+
+    certExtensions.append(
+        crypto.X509Extension(b"nsCertType", False, b", ".join(certType))
+    )
+    certExtensions.append(crypto.X509Extension(b"basicConstraints", False, b"CA:FALSE"))
+    certExtensions.append(crypto.X509Extension(b"keyUsage", False, b", ".join(keyUsage)))
+
+    return certExtensions
+
+
 @cert_app.command(name="new")
 def cert_new(
     common_name: str = typer.Argument(
@@ -875,8 +936,8 @@ def cert_new(
         envvar="POST_COMMAND",
         help="Command to run to post-process cert/key after generation.",
     ),
-    cert_type: CertType = typer.Option(
-        "server",
+    cert_type: List[CertType] = typer.Option(
+        ["server"],
         envvar="CERT_TYPE",
         help="Type of certificate to generate.",
     ),
@@ -946,20 +1007,7 @@ def cert_new(
                 san = "DNS:" + san
             san_list.append(san.encode("ascii"))
 
-    certExtensions = []
-    if cert_type == "server":
-        # certExtensions.append(crypto.X509Extension(b"extendedKeyUsage", True, b"serverAuth"))
-        certExtensions.append(crypto.X509Extension(b"nsCertType", False, b"server"))
-        certExtensions.append(
-            crypto.X509Extension(b"basicConstraints", False, b"CA:FALSE")
-        )
-        certExtensions.append(
-            crypto.X509Extension(
-                b"keyUsage",
-                False,
-                b"Digital Signature, Non Repudiation, Key Encipherment",
-            )
-        )
+    certExtensions = extensionsFromCertType(cert_type)
 
     certExtensions.append(
         crypto.X509Extension(b"subjectAltName", False, b", ".join(san_list))

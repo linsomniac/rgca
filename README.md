@@ -32,10 +32,11 @@ What works:
   - Multiple Subject Alternative Names.
   - CA creation.
   - CRL creation, cert revoking.
+  - Client and server cert types
 
 What does not work:
 
-  - Client or other types of certs.
+  - Other types of certs (email, objsign, etc).
   - Signing CSR, creating CSRs.
   - Generating new certs off existing ones.
 
