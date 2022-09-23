@@ -1001,7 +1001,7 @@ def cert_new(
 
     if subject_alternative_names:
         for san in subject_alternative_names:
-            if append_domain:
+            if not san.lower().startswith("ip:") and append_domain:
                 san = san + append_domain
             if not san.split(":")[0].upper() in ["DNS", "IP"]:
                 san = "DNS:" + san
