@@ -130,12 +130,12 @@ CC0 1.0 Universal, see LICENSE file for more information.
     
       For example, take this "config.ini":
     
-          [DEFAULT]     SUBJECT\_C=US     SUBJECT\_ST=Colorado     SUBJECT\_L=Denver
-          SUBJECT\_O=Example     SUBJECT\_OU=Corporate
-          SUBJECT\_EMAIL=admin@example.com
+          [DEFAULT]     SUBJECT_C=US     SUBJECT_ST=Colorado     SUBJECT_L=Denver
+          SUBJECT_O=Example     SUBJECT_OU=Corporate
+          SUBJECT_EMAIL=admin@example.com
     
-          [widget]     SUBJECT\_OU=Widgets
-          SUBJECT\_EMAIL=admin@widgets.example.com
+          [widget]     SUBJECT_OU=Widgets
+          SUBJECT_EMAIL=admin@widgets.example.com
     
       Then you can run it with:
     
@@ -151,13 +151,13 @@ CC0 1.0 Universal, see LICENSE file for more information.
                                       Additional group to pull settings from.  If
                                       set, named group in the config file will be
                                       loaded in addition to 'DEFAULT'.  [env var:
-                                      CONFIG\_GROUP; default: DEFAULT]
+                                      CONFIG_GROUP; default: DEFAULT]
       --env-from-cert TEXT            Load the environment from a certificate
                                       file, useful to populate the settings for
                                       'new' off an existing certificate for
                                       reissuing the certificate with new
                                       expiration or SAN.  [env var:
-                                      ENV\_FROM\_CERT\_file]
+                                      ENV_FROM_CERT_file]
       --install-completion            Install completion for the current shell.
       --show-completion               Show completion for the current shell, to
                                       copy it or customize the installation.
@@ -171,33 +171,33 @@ CC0 1.0 Universal, see LICENSE file for more information.
 
 ## rgca ca new --help
 
-    Usage: rgca ca new [OPTIONS] COMMON\_NAME CA\_KEY\_FILE CA\_CERT\_FILE
+    Usage: rgca ca new [OPTIONS] COMMON_NAME CA_KEY_FILE CA_CERT_FILE
     
       Create a new Certificate Authority
     
     Arguments:
-      COMMON\_NAME   Main name on certificate  [env var: SUBJECT\_CN;required]
-      CA\_KEY\_FILE   File name to write private key to.  [env var:
-                    CA\_KEY\_FILE;required]
-      CA\_CERT\_FILE  File name to write CA certificate to.  [env var:
-                    CA\_CERT\_FILE;required]
+      COMMON_NAME   Main name on certificate  [env var: SUBJECT_CN;required]
+      CA_KEY_FILE   File name to write private key to.  [env var:
+                    CA_KEY_FILE;required]
+      CA_CERT_FILE  File name to write CA certificate to.  [env var:
+                    CA_CERT_FILE;required]
     
     Options:
       -b, --ca-key-bits, --bits INTEGER
                                       Size of generated key, in bits.  [env var:
-                                      CA\_KEY\_BITS; default: 8192]
+                                      CA_KEY_BITS; default: 8192]
       -c, --cipher [des3|aes128|aes192|aes256]
                                       Cipher to use to encrypt CA key.  [env var:
-                                      CA\_CIPHER; default: Cipher.aes256]
+                                      CA_CIPHER; default: Cipher.aes256]
       --passphrase TEXT               Passphrase for CA key  [env var:
-                                      CA\_PASSPHRASE]
+                                      CA_PASSPHRASE]
       -P, --prompt-for-passphrase     Prompt for a passphrase, overriding the
                                       config or environment settings.
       -N, --no-passphrase             Do not put a passphrase on the key file.
       --overwrite / --no-overwrite    Overwrite the key file if it already exists.
                                       [default: no-overwrite]
       -d, --valid-days INTEGER        Number of days the certificate is valid for.
-                                      [env var: VALID\_DAYS; default: 365]
+                                      [env var: VALID_DAYS; default: 365]
       -D, --digest [sha256|sha512]    Message digest to use when signing the key.
                                       [env var: DIGEST; default: sha512]
       -a, --append-domain TEXT        If provided, this value is appended to all
@@ -205,41 +205,41 @@ CC0 1.0 Universal, see LICENSE file for more information.
                                       used.  For example this creates
                                       ca.example.com rgca ca new --append-domain
                                       .example.com ca ca.crt ca.key  [env var:
-                                      APPEND\_DOMAIN]
-      -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT\_C;
+                                      APPEND_DOMAIN]
+      -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT_C;
                                       required]
-      -ST, --state-name, --ST TEXT    Subject: State name  [env var: SUBJECT\_ST;
+      -ST, --state-name, --ST TEXT    Subject: State name  [env var: SUBJECT_ST;
                                       required]
       -L, --locality-name, --L TEXT   Subject: Locality(city) name  [env var:
-                                      SUBJECT\_L; required]
+                                      SUBJECT_L; required]
       -O, --organization-name, --O TEXT
                                       Subject: Organization name  [env var:
-                                      SUBJECT\_O; required]
+                                      SUBJECT_O; required]
       -OU, --organization-unit-name, --OU TEXT
                                       Subject: Organization unit name  [env var:
-                                      SUBJECT\_OU]
+                                      SUBJECT_OU]
       -E, --email-address, --E TEXT   Subject: Email address  [env var:
-                                      SUBJECT\_EMAIL; required]
+                                      SUBJECT_EMAIL; required]
       --run-pre / --no-run-pre        Use '--pre-command' before certificate
-                                      generation.  [env var: RUN\_PRE; default: no-
+                                      generation.  [env var: RUN_PRE; default: no-
                                       run-pre]
       --pre-command TEXT              Command to run to before starting
                                       certificate generation.  [env var:
-                                      PRE\_COMMAND]
+                                      PRE_COMMAND]
       --run-post / --no-run-post      Use '--post-command' to post-process
                                       key/cert after generation.  [env var:
-                                      RUN\_POST; default: no-run-post]
+                                      RUN_POST; default: no-run-post]
       --post-command TEXT             Command to run to post-process cert/key
-                                      after generation.  [env var: POST\_COMMAND]
+                                      after generation.  [env var: POST_COMMAND]
       --random-serial-bits [32|64|128]
                                       Number of bits for the random serial number
-                                      generation.  [env var: RANDOM\_SERIAL\_BITS;
+                                      generation.  [env var: RANDOM_SERIAL_BITS;
                                       default: 64]
       --help                          Show this message and exit.
 
 ## rgca cert new --help
 
-    Usage: rgca cert new [OPTIONS] COMMON\_NAME
+    Usage: rgca cert new [OPTIONS] COMMON_NAME
     
       Create a new certificate signed by the CA key.
     
@@ -256,41 +256,41 @@ CC0 1.0 Universal, see LICENSE file for more information.
       to --post-command is run after the certificate has been generated.  They are
       called with these environment variables set:
     
-      SCRIPT\_TYPE: The string "CERT\_NEW".
+      SCRIPT_TYPE: The string "CERT_NEW".
     
       FILES: A space separated list of the files generated.
     
-      CERT\_FILE: The certificate file.
+      CERT_FILE: The certificate file.
     
-      KEY\_FILE: The key file.
+      KEY_FILE: The key file.
     
     Arguments:
-      COMMON\_NAME  Main name on certificate  [env var: SUBJECT\_CN;required]
+      COMMON_NAME  Main name on certificate  [env var: SUBJECT_CN;required]
     
     Options:
       --cert-file TEXT                File name to write certificate to.  This
                                       name can be jinja2 templated from the
-                                      environment.  [env var: CERT\_FILE; default:
-                                      {{ SUBJECT\_CN }}.crt]
+                                      environment.  [env var: CERT_FILE; default:
+                                      {{ SUBJECT_CN }}.crt]
       --key-file TEXT                 File name to write private key to.  This
                                       name can be jinja2 templated from the
-                                      environment.  [env var: KEY\_FILE; default:
-                                      {{ SUBJECT\_CN }}.key]
+                                      environment.  [env var: KEY_FILE; default:
+                                      {{ SUBJECT_CN }}.key]
       --serial-file PATH              File that has the next serial number in it.
                                       If undefined or a non-existant file, serial
-                                      0 is used.  [env var: SERIAL\_FILE]
+                                      0 is used.  [env var: SERIAL_FILE]
       --random-serial / --no-random-serial
                                       Use a randomly generated serial number
                                       rather than the --serial-file.  [env var:
-                                      RANDOM\_SERIAL; default: random-serial]
+                                      RANDOM_SERIAL; default: random-serial]
       --random-serial-bits [32|64|128]
                                       Number of bits for the random serial number
-                                      generation.  [env var: RANDOM\_SERIAL\_BITS;
+                                      generation.  [env var: RANDOM_SERIAL_BITS;
                                       default: 64]
       --index-file PATH               File to write the certificate information to
-                                      (ca database).  [env var: INDEX\_FILE]
+                                      (ca database).  [env var: INDEX_FILE]
       -d, --valid-days INTEGER        Number of days the certificate is valid for.
-                                      [env var: VALID\_DAYS; default: 365]
+                                      [env var: VALID_DAYS; default: 365]
       -s, --san TEXT                  Subject alternative name to add to the
                                       certificate.  The Common Name is listed as
                                       the first SAN.  If no prefix is given,
@@ -303,7 +303,7 @@ CC0 1.0 Universal, see LICENSE file for more information.
                                       '--env-from-cert' to remove SANs from the
                                       original cert when generating a new cert.
                                       When set in environment, pass a space
-                                      separated list.  [env var: REMOVE\_SANS]
+                                      separated list.  [env var: REMOVE_SANS]
       -b, --bits INTEGER              Size of generated key, in bits.  [env var:
                                       BITS; default: 8192]
       -D, --digest [sha256|sha512]    Message digest to use when signing the key.
@@ -315,40 +315,40 @@ CC0 1.0 Universal, see LICENSE file for more information.
                                       repeat '.example.com' all over: rgca cert
                                       new --append-domain .example.com --san test
                                       --san foo web web.crt web.key  [env var:
-                                      APPEND\_DOMAIN]
-      -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT\_C;
+                                      APPEND_DOMAIN]
+      -C, --country-name, --C TEXT    Subject: Country name  [env var: SUBJECT_C;
                                       required]
-      -ST, --state-name, --ST TEXT    Subject: State name  [env var: SUBJECT\_ST;
+      -ST, --state-name, --ST TEXT    Subject: State name  [env var: SUBJECT_ST;
                                       required]
       -L, --locality-name, --L TEXT   Subject: Locality(city) name  [env var:
-                                      SUBJECT\_L; required]
+                                      SUBJECT_L; required]
       -O, --organization-name, --O TEXT
                                       Subject: Organization name  [env var:
-                                      SUBJECT\_O; required]
+                                      SUBJECT_O; required]
       -OU, --organization-unit-name, --OU TEXT
                                       Subject: Organization unit name  [env var:
-                                      SUBJECT\_OU]
+                                      SUBJECT_OU]
       -E, --email-address, --E TEXT   Subject: Email address  [env var:
-                                      SUBJECT\_EMAIL; required]
+                                      SUBJECT_EMAIL; required]
       -c, --cipher [des3|aes128|aes192|aes256]
                                       Cipher to use to encrypt certificate key.
                                       This is only used if a passphrase is
-                                      specified.  [env var: CERT\_CIPHER; default:
+                                      specified.  [env var: CERT_CIPHER; default:
                                       Cipher.aes256]
       --ca-cert-file TEXT             File name of the CA certificate, if
                                       specified the generated cert is issued using
                                       this certificate.  This needs to be
                                       specified to properly be marked as being
-                                      issued by the CA.  [env var: CA\_CERT\_FILE;
+                                      issued by the CA.  [env var: CA_CERT_FILE;
                                       required]
       --ca-key-file TEXT              File name of the CA key, if specified the
                                       generated cert is signed with this key.  If
                                       not specified, the cert is unsigned.  [env
-                                      var: CA\_KEY\_FILE; required]
+                                      var: CA_KEY_FILE; required]
       --ca-passphrase TEXT            Passphrase to decrypt the key.  If not
                                       specified, and the key is encrypted, a
                                       passphrase will be prompted for.  [env var:
-                                      CA\_PASSPHRASE]
+                                      CA_PASSPHRASE]
       -P, --prompt-for-passphrase     Prompt for a passphrase, overriding the
                                       config or environment settings.  Is
                                       overridden by --no-passphrase.
@@ -356,91 +356,91 @@ CC0 1.0 Universal, see LICENSE file for more information.
                                       This overrides settings in the
                                       config/environment/CLI for
                                       --passphrase/--prompt-for-passphrase.  [env
-                                      var: NO\_PASSPHRASE]
+                                      var: NO_PASSPHRASE]
       --run-pre / --no-run-pre        Use '--pre-command' before certificate
-                                      generation.  [env var: RUN\_PRE; default: no-
+                                      generation.  [env var: RUN_PRE; default: no-
                                       run-pre]
       --pre-command TEXT              Command to run to before starting
                                       certificate generation.  [env var:
-                                      PRE\_COMMAND]
+                                      PRE_COMMAND]
       --run-post / --no-run-post      Use '--post-command' to post-process
                                       key/cert after generation.  [env var:
-                                      RUN\_POST; default: no-run-post]
+                                      RUN_POST; default: no-run-post]
       --post-command TEXT             Command to run to post-process cert/key
-                                      after generation.  [env var: POST\_COMMAND]
+                                      after generation.  [env var: POST_COMMAND]
       --cert-type [server|client]     Type of certificate to generate.  On CLI,
                                       use once for each type to add to generated
                                       cert, for the environment use a space-
-                                      separated list.  [env var: CERT\_TYPE;
+                                      separated list.  [env var: CERT_TYPE;
                                       default: server]
       --help                          Show this message and exit.
 
 ## rgca cert show --help
 
-    Usage: rgca cert show [OPTIONS] CERT\_FILE
+    Usage: rgca cert show [OPTIONS] CERT_FILE
     
       Display information about a certificate.
     
     Arguments:
-      CERT\_FILE  Certificate file to show information about.  [env var:
-                 CERT\_FILE;required]
+      CERT_FILE  Certificate file to show information about.  [env var:
+                 CERT_FILE;required]
     
     Options:
       --help  Show this message and exit.
 
 ## rgca crl new --help
 
-    Usage: rgca crl new [OPTIONS] CRL\_FILE CA\_KEY\_FILE CA\_CERT\_FILE
+    Usage: rgca crl new [OPTIONS] CRL_FILE CA_KEY_FILE CA_CERT_FILE
     
       Create a new Certificate Revocation List
     
     Arguments:
-      CRL\_FILE      Certificate Revocation List file.  [env var:
-                    CRL\_FILE;required]
-      CA\_KEY\_FILE   File name to write private key to.  [env var:
-                    CA\_KEY\_FILE;required]
-      CA\_CERT\_FILE  File name to write CA certificate to.  [env var:
-                    CA\_CERT\_FILE;required]
+      CRL_FILE      Certificate Revocation List file.  [env var:
+                    CRL_FILE;required]
+      CA_KEY_FILE   File name to write private key to.  [env var:
+                    CA_KEY_FILE;required]
+      CA_CERT_FILE  File name to write CA certificate to.  [env var:
+                    CA_CERT_FILE;required]
     
     Options:
       --passphrase TEXT             Passphrase for CA key  [env var:
-                                    CA\_PASSPHRASE]
+                                    CA_PASSPHRASE]
       -P, --prompt-for-passphrase   Prompt for a passphrase for the CA key,
                                     overriding the config or environment settings.
       -N, --no-passphrase           Do not use a passphrase for the CA key.
       -d, --valid-days INTEGER      Number of days the CRL is valid for.  [env
-                                    var: CRL\_VALID\_DAYS; default: 100]
+                                    var: CRL_VALID_DAYS; default: 100]
       -D, --digest [sha256|sha512]  Message digest to use when signing the key.
                                     [env var: DIGEST; default: sha512]
       --overwrite / --no-overwrite  Overwrite the key file if it already exists.
                                     [default: no-overwrite]
       --index-file PATH             File to write the certificate information to
-                                    (ca database).  [env var: INDEX\_FILE]
+                                    (ca database).  [env var: INDEX_FILE]
       --run-pre / --no-run-pre      Use '--pre-command' before certificate
-                                    generation.  [env var: RUN\_PRE; default: no-
+                                    generation.  [env var: RUN_PRE; default: no-
                                     run-pre]
       --pre-command TEXT            Command to run to before starting certificate
-                                    generation.  [env var: PRE\_COMMAND]
+                                    generation.  [env var: PRE_COMMAND]
       --run-post / --no-run-post    Use '--post-command' to post-process key/cert
-                                    after generation.  [env var: RUN\_POST;
+                                    after generation.  [env var: RUN_POST;
                                     default: no-run-post]
       --post-command TEXT           Command to run to post-process cert/key after
-                                    generation.  [env var: POST\_COMMAND]
+                                    generation.  [env var: POST_COMMAND]
       --help                        Show this message and exit.
 
 ## rgca crl revoke --help
 
-    Usage: rgca crl revoke [OPTIONS] CRL\_FILE CA\_KEY\_FILE CA\_CERT\_FILE
+    Usage: rgca crl revoke [OPTIONS] CRL_FILE CA_KEY_FILE CA_CERT_FILE
     
       Revoke certificates
     
     Arguments:
-      CRL\_FILE      Certificate Revocation List file.  [env var:
-                    CRL\_FILE;required]
-      CA\_KEY\_FILE   File name to write private key to.  [env var:
-                    CA\_KEY\_FILE;required]
-      CA\_CERT\_FILE  File name to write CA certificate to.  [env var:
-                    CA\_CERT\_FILE;required]
+      CRL_FILE      Certificate Revocation List file.  [env var:
+                    CRL_FILE;required]
+      CA_KEY_FILE   File name to write private key to.  [env var:
+                    CA_KEY_FILE;required]
+      CA_CERT_FILE  File name to write CA certificate to.  [env var:
+                    CA_CERT_FILE;required]
     
     Options:
       -s, --serial TEXT               The serial number of a certificate to
@@ -452,38 +452,38 @@ CC0 1.0 Universal, see LICENSE file for more information.
       --rev-date TEXT                 ASN.1 formatted revocation date (defaults to
                                       current time, format: [YYYYMMDDHHMMSS]Z).
       --passphrase TEXT               Passphrase for CA key  [env var:
-                                      CA\_PASSPHRASE]
+                                      CA_PASSPHRASE]
       -P, --prompt-for-passphrase     Prompt for a passphrase for the CA key,
                                       overriding the config or environment
                                       settings.
       -N, --no-passphrase             Do not use a passphrase for the CA key.
       -d, --valid-days INTEGER        Number of days the CRL is valid for.  [env
-                                      var: CRL\_VALID\_DAYS; default: 100]
+                                      var: CRL_VALID_DAYS; default: 100]
       -D, --digest [sha256|sha512]    Message digest to use when signing the key.
                                       [env var: DIGEST; default: sha512]
       --index-file PATH               File to write the certificate information to
-                                      (ca database).  [env var: INDEX\_FILE]
+                                      (ca database).  [env var: INDEX_FILE]
       --run-pre / --no-run-pre        Use '--pre-command' before certificate
-                                      generation.  [env var: RUN\_PRE; default: no-
+                                      generation.  [env var: RUN_PRE; default: no-
                                       run-pre]
       --pre-command TEXT              Command to run to before starting
                                       certificate generation.  [env var:
-                                      PRE\_COMMAND]
+                                      PRE_COMMAND]
       --run-post / --no-run-post      Use '--post-command' to post-process
                                       key/cert after generation.  [env var:
-                                      RUN\_POST; default: no-run-post]
+                                      RUN_POST; default: no-run-post]
       --post-command TEXT             Command to run to post-process cert/key
-                                      after generation.  [env var: POST\_COMMAND]
+                                      after generation.  [env var: POST_COMMAND]
       --help                          Show this message and exit.
 
 ## rgca showkey --help
 
-    Usage: rgca showkey [OPTIONS] KEY\_FILE
+    Usage: rgca showkey [OPTIONS] KEY_FILE
     
       Display information about the key in a keyfile.
     
     Arguments:
-      KEY\_FILE  Key file to show information about.  [env var: KEY\_FILE;required]
+      KEY_FILE  Key file to show information about.  [env var: KEY_FILE;required]
     
     Options:
       -P, --prompt-for-passphrase     Prompt for a passphrase, overriding the
