@@ -76,7 +76,7 @@ Given a config file that looks like:
 Some example commands to create certificates:
 
     #  Create a new CA
-    rgca ca new example.com ca.key ca.crt
+    rgca ca new example.com
     #  Show information about a cert
     rgca cert show ca.crt
     #  Create a dev cert for dev1.example.com
