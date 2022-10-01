@@ -1,18 +1,21 @@
 # RG Certificate Authority Helper
 
-This is a work in progress experiment to make generating self-signed SSL certificates
-easier to manage.
+This is an extremely powerful and flexible command-line tool for creating and managing a
+Certificate Authority and associated certificates.  It is much less cumbersome to use than
+the OpenSSL command-line, with a simple and intuitive command-line.  Simple CAs and certs
+can be generated directly from the CLI, while more complex uses can be simplified via
+config files and the environment.
 
 # Features
 
-- Quick "show cert info": "rgca cert show FILE" (as opposed to "openssl x509 -in FILE -noout -text").
-- Rich command-line and config file to control cert generation.
 - Pre/post scripts to manage certs (say, deploying them to a server, committing
   serial/index to git)
 - Config groups so you can easily select between sets of configs (`rgca --type
   corporate cert new www.example.com` vs. `--type developer`).
-- Everything can be controlled by command line arguments.  (`rgca cert new
+- Everything can be controlled by command line arguments, config files, or the environment.  (`rgca cert new
   --valid-days 365 --bits 1024 --OU WidgetUnit`, see "rgca cert new --help" below).
+- A new cert can be generated based on values from a previous cert (see "--env-from-cert" below).
+- Quick "show cert info": "rgca cert show FILE" (as opposed to "openssl x509 -in FILE -noout -text").
 
 ## Requirements
 
@@ -24,11 +27,13 @@ For example on Ubuntu: `sudo apt install python3 python3-pip python3-pyopenssl; 
 
 ## Status
 
+It is fully featured with the exception of CSRs. I use this regularly in my work and it's a joy to use.
+
 What works:
 
   - The "cert new" command is fully implemented for server certs.
   - "cert new" is compatible with openssl CLI generated CAs (cert, key, index, serial).
-  - The CLI arguments and config files.
+  - The CLI arguments and config files and environment variables.
   - Multiple Subject Alternative Names.
   - CA creation.
   - CRL creation, cert revocation.

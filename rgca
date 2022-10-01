@@ -276,11 +276,13 @@ def load_env_from_cert(cert_file: str) -> None:
         extension_value = str(original_cert.get_extension(i))
         if short_name == "subjectAltName":
             # DNS:foo.example.com, DNS:test.example.com
+            san_list = []
             for x in extension_value.split(","):
-                x = x.strip().lower()
-            os.environ["RGCA_INTERNAL_ENV_SANS"] = " ".join(
-                [x.strip() for x in extension_value.split(",")]
-            )
+                x = x.strip()
+                if x.startswith('IP Address:'):
+                    x = 'IP:' + x.split(':', 1)[1]
+                san_list.append(x)
+            os.environ["RGCA_INTERNAL_ENV_SANS"] = " ".join(san_list)
 
         elif short_name == "nsCertType":
             cert_type = []
