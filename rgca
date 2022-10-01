@@ -279,8 +279,8 @@ def load_env_from_cert(cert_file: str) -> None:
             san_list = []
             for x in extension_value.split(","):
                 x = x.strip()
-                if x.startswith('IP Address:'):
-                    x = 'IP:' + x.split(':', 1)[1]
+                if x.startswith("IP Address:"):
+                    x = "IP:" + x.split(":", 1)[1]
                 san_list.append(x)
             os.environ["RGCA_INTERNAL_ENV_SANS"] = " ".join(san_list)
 
@@ -833,9 +833,9 @@ def extensionsFromCertType(cert_type: List[CertType]) -> List[crypto.X509Extensi
 
 def generate_san_list(
     common_name: str,
-    append_domain: str,
-    subject_alternative_names: List[str],
-    remove_subject_alternative_names: List[str],
+    append_domain: Union[str, None],
+    subject_alternative_names: Union[List[str], None],
+    remove_subject_alternative_names: Union[List[str], None],
 ) -> List[bytes]:
     """Create a non-duplicated SAN list based on the common_name, SAN list read from
     existing certificate via --env-from-cert, and from CLI arguments.
@@ -851,7 +851,7 @@ def generate_san_list(
             if san not in san_list:
                 san_list.append(san)
 
-    def format_san(san: str, append_domain: str) -> bytes:
+    def format_san(san: str, append_domain: Union[str, None]) -> bytes:
         if not san.lower().startswith("ip:") and append_domain:
             san = san + append_domain
         if not san.split(":")[0].upper() in ["DNS", "IP"]:
@@ -864,10 +864,11 @@ def generate_san_list(
             if san not in san_list:
                 san_list.append(san)
 
-    for san in remove_subject_alternative_names:
-        san = format_san(san, append_domain)
-        if san in san_list:
-            san_list.remove(san)
+    if remove_subject_alternative_names:
+        for san in remove_subject_alternative_names:
+            san = format_san(san, append_domain)
+            if san in san_list:
+                san_list.remove(san)
 
     return san_list
 
