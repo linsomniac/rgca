@@ -149,6 +149,13 @@ def callback(
         help="Additional group to pull settings from.  If set, named group in the "
         "config file will be loaded in addition to 'DEFAULT'.",
     ),
+    env_from_cert: Union[str, None] = typer.Option(
+        None,
+        "--env-from-cert",
+        envvar="ENV_FROM_CERT_file",
+        help="Load the environment from a certificate file, useful to populate the settings for "
+        "'new' off an existing certificate for reissuing the certificate with new expiration or SAN.",
+    ),
 ):
     """rgca is a Certificate Authority helper, to make creating certificates, either from scripts
     or from the CLI, easier.  All (reasonable) values can be passed either by CLI arguments, config
@@ -218,6 +225,83 @@ def callback(
                     os.environ[envname] = v
                 if envname.startswith("!"):
                     os.environ[envname[1:]] = v
+
+    #  Need to add arguments for key_file and passphrase options
+    # if env_from_key:
+    #    load_env_from_key(env_from_key)
+    if env_from_cert:
+        load_env_from_cert(env_from_cert)
+
+
+def load_env_from_key(key_file: str) -> None:
+    """Load the key_file and populate the environment with the values in the cert, as
+    approriate rgca commands to consume.  For example, to easily regenerate a cert."""
+    os.environ["KEY_FILE"] = key_file
+
+    key_crypt_args = get_key_encrypt_args(
+        ca_passphrase, no_passphrase, prompt_for_passphrase, None, "Cert", confirm=True
+    )
+    with open(key_file, "rt") as f:
+        try:
+            key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read(), **key_crypt_args)
+        except crypto.Error as e:
+            error = " ".join(e.args[0][0])
+            typer.echo(f"Failed to load key: {error}")
+            raise typer.Exit(code=1)
+
+    os.environ["BITS"] = str(key.bits())
+
+
+def load_env_from_cert(cert_file: str) -> None:
+    """Load the cert_file and populate the environment with the values in the cert, as
+    approriate rgca commands to consume.  For example, to easily regenerate a cert."""
+    with open(cert_file, "rt") as f:
+        original_cert = crypto.load_certificate(
+            crypto.FILETYPE_PEM, f.read().encode("ascii")
+        )
+
+    os.environ["CERT_FILE"] = cert_file
+    os.environ["SUBJECT_CN"] = original_cert.get_subject().CN
+    os.environ["SUBJECT_C"] = original_cert.get_subject().C
+    os.environ["SUBJECT_ST"] = original_cert.get_subject().ST
+    os.environ["SUBJECT_L"] = original_cert.get_subject().L
+    os.environ["SUBJECT_O"] = original_cert.get_subject().O
+    if original_cert.get_subject().OU is not None:
+        os.environ["SUBJECT_OU"] = original_cert.get_subject().OU
+    os.environ["SUBJECT_EMAIL"] = original_cert.get_subject().emailAddress
+
+    for i in range(original_cert.get_extension_count()):
+        # critical = original_cert.get_extension(i).get_critical()
+        short_name = original_cert.get_extension(i).get_short_name().decode("ascii")
+        extension_value = str(original_cert.get_extension(i))
+        if short_name == "subjectAltName":
+            # DNS:foo.example.com, DNS:test.example.com
+            for x in extension_value.split(","):
+                x = x.strip().lower()
+            os.environ["RGCA_INTERNAL_ENV_SANS"] = " ".join(
+                [x.strip() for x in extension_value.split(",")]
+            )
+
+        elif short_name == "nsCertType":
+            cert_type = []
+            for x in extension_value.split(","):
+                x = x.strip().lower()
+                if "server" in x:
+                    cert_type.append("server")
+                if "client" in x:
+                    cert_type.append("client")
+            os.environ["CERT_TYPE"] = " ".join(cert_type)
+
+        elif short_name == "basicConstraints":
+            #  CA:FALSE / CA:TRUE
+            #  not settable in environment
+            pass
+        elif short_name == "keyUsage":
+            # Digital Signature, Non Repudiation, Key Encipherment
+            #  set based off key type, not settable in environment
+            pass
+        else:
+            raise NotImplementedError(f'Unnknown extension "{short_name}"')
 
 
 def revoke(
@@ -745,6 +829,47 @@ def extensionsFromCertType(cert_type: List[CertType]) -> List[crypto.X509Extensi
     return certExtensions
 
 
+def generate_san_list(
+    common_name: str,
+    append_domain: str,
+    subject_alternative_names: List[str],
+    remove_subject_alternative_names: List[str],
+) -> List[bytes]:
+    """Create a non-duplicated SAN list based on the common_name, SAN list read from
+    existing certificate via --env-from-cert, and from CLI arguments.
+
+    Returns:
+        List of non-duplicated SANs."""
+    san_list = [f"DNS:{common_name}".encode("ascii")]
+
+    internal_env_sans = os.environ.get("RGCA_INTERNAL_ENV_SANS")
+    if internal_env_sans:
+        for san in internal_env_sans.split():
+            san = san.encode("ascii")
+            if san not in san_list:
+                san_list.append(san)
+
+    def format_san(san: str, append_domain: str) -> bytes:
+        if not san.lower().startswith("ip:") and append_domain:
+            san = san + append_domain
+        if not san.split(":")[0].upper() in ["DNS", "IP"]:
+            san = "DNS:" + san
+        return san.encode("ascii")
+
+    if subject_alternative_names:
+        for san in subject_alternative_names:
+            san = format_san(san, append_domain)
+            if san not in san_list:
+                san_list.append(san)
+
+    for san in remove_subject_alternative_names:
+        san = format_san(san, append_domain)
+        if san in san_list:
+            san_list.remove(san)
+
+    return san_list
+
+
 @cert_app.command(name="new")
 def cert_new(
     common_name: str = typer.Argument(
@@ -794,9 +919,19 @@ def cert_new(
         None,
         "--san",
         "-s",
+        envvar="SANS",
         help="Subject alternative name to add to the certificate.  The Common Name is "
         """listed as the first SAN.  If no prefix is given, "DNS:" is prepended, valid """
-        """prefixes are "IP:" and "DNS:".""",
+        """prefixes are "IP:" and "DNS:".  When set in environment, pass a space separated list.""",
+    ),
+    remove_subject_alternative_names: Optional[List[str]] = typer.Option(
+        None,
+        "--rm-san",
+        envvar="REMOVE_SANS",
+        help="Remove this SAN from the list used in the certificate.  This is primarily "
+        "useful with '--env-from-cert' to remove SANs from the original cert when "
+        "generating a new cert.  When set in environment, pass a space separated list."
+        "",
     ),
     bits: int = typer.Option(
         8192,
@@ -939,7 +1074,8 @@ def cert_new(
     cert_type: List[CertType] = typer.Option(
         ["server"],
         envvar="CERT_TYPE",
-        help="Type of certificate to generate.",
+        help="Type of certificate to generate.  On CLI, use once for each type to add to generated "
+        "cert, for the environment use a space-separated list.",
     ),
 ):
     """Create a new certificate signed by the CA key.
@@ -997,15 +1133,12 @@ def cert_new(
     cert.get_subject().CN = common_name
     cert.get_subject().emailAddress = email_address
 
-    san_list = [f"DNS:{common_name}".encode("ascii")]
-
-    if subject_alternative_names:
-        for san in subject_alternative_names:
-            if not san.lower().startswith("ip:") and append_domain:
-                san = san + append_domain
-            if not san.split(":")[0].upper() in ["DNS", "IP"]:
-                san = "DNS:" + san
-            san_list.append(san.encode("ascii"))
+    san_list = generate_san_list(
+        common_name,
+        append_domain,
+        subject_alternative_names,
+        remove_subject_alternative_names,
+    )
 
     certExtensions = extensionsFromCertType(cert_type)
 
