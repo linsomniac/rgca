@@ -78,7 +78,7 @@ class IndexFile:
         rx = re.compile(
             r"^(?P<status>[VRE])\s+(?P<expiration_date>\d+Z)\s+"
             r"(?P<revocation_date>(?:\d+Z)|)\s(?P<serial_number>[\dabcdefABCDEF]+)\s+"
-            r"(?P<filename>\S+)\s+(?P<cert_dn>\S+)\s*$"
+            r"(?P<filename>\S+)\s+(?P<cert_dn>.+)\s*$"
         )
         with open(self.index_filename, "rt") as f:
             self.index_data = []
@@ -107,7 +107,9 @@ class IndexFile:
             if self.parse_dn(row["cert_dn"]).get("CN") == cn:
                 yield row
 
-    def set_sn_status(self, sn: str, status: CertStatus) -> None:
+    def set_sn_status(self, sn: Union[bytes, str], status: CertStatus) -> None:
+        if type(sn) == bytes:
+            sn = sn.decode('ascii')
         sn = sn.lstrip("0")
 
         for row in self.index_data:
@@ -1442,8 +1444,9 @@ def crl_revoke(
     with open(crl_file, "rt") as f:
         crl = crypto.load_crl(crypto.FILETYPE_PEM, f.read().encode("ascii"))
 
+    revoked_list = crl.get_revoked() or []
     existing_serials = list(
-        [int(x.get_serial().decode("ascii"), 16) for x in crl.get_revoked()]
+        [int(x.get_serial().decode("ascii"), 16) for x in revoked_list]
     )
     updates = 0
 
